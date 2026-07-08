@@ -1821,11 +1821,20 @@ function CustomerApp({ onOrder, orders }) {
     const [cMovers, setCMovers] = useState(0);
     const [delivSug, setDelivSug] = useState({ list: [], key: null });
     const [delivPts, setDelivPts] = useState({}); // координаты точек доставки {dFrom:{lat,lng},dTo:{...},cFrom,cTo}
+    const geoTimerD = useRef(null);
     function delivSuggest(val, key, setter) {
         setter(val);
         const q = val.toLowerCase().trim();
         if (q.length > 0) {
             setDelivSug({ list: DUSHANBE_PLACES.filter(p => p.name.toLowerCase().includes(q) || p.addr.toLowerCase().includes(q)).slice(0, 5), key });
+            if (q.length >= 3) {
+                clearTimeout(geoTimerD.current);
+                geoTimerD.current = setTimeout(async () => {
+                    const real = await geocodeSearch(val, "tj");
+                    if (real && real.length)
+                        setDelivSug({ list: real, key, real: true });
+                }, 500);
+            }
         }
         else {
             setDelivSug({ list: DUSHANBE_PLACES.filter(p => p.pop), key });
@@ -2703,24 +2712,24 @@ function CustomerApp({ onOrder, orders }) {
                     React.createElement("input", { value: chatInput, onChange: e => setChatInput(e.target.value), onKeyDown: e => e.key === "Enter" && sendChatMsg(), placeholder: "\u041D\u0430\u043F\u0438\u0441\u0430\u0442\u044C...", style: { flex: 1, padding: "10px 14px", borderRadius: 22, border: `1.5px solid ${BD}`, fontSize: 13, outline: "none", fontFamily: "inherit" } }),
                     React.createElement("button", { onClick: sendChatMsg, disabled: !chatInput.trim(), style: { width: 42, height: 42, borderRadius: "50%", background: R, color: WH, border: "none", fontSize: 18, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 } }, "\u2191")))),
         scr === "intercity" && React.createElement(IntercityScreen, { onBack: () => setScr("home") }),
-        scr === "home" && React.createElement(Home, null),
-        scr === "orders_tab" && React.createElement(OrdersTab, null),
-        scr === "promo_tab" && React.createElement(PromosTab, null),
-        scr === "profile_tab" && React.createElement(ProfileTab, null),
+        scr === "home" && Home(),
+        scr === "orders_tab" && OrdersTab(),
+        scr === "promo_tab" && PromosTab(),
+        scr === "profile_tab" && ProfileTab(),
         scr === "taxi" && React.createElement(TaxiScreen, { onBack: () => setScr("home"), onHelp: () => setScr("help") }),
-        scr === "checkout" && React.createElement(Checkout, null),
-        scr === "tracking" && React.createElement(Tracking, null),
-        scr === "deliv_menu" && React.createElement(DelivMenu, null),
-        scr === "deliv_ab" && React.createElement(DelivAB, null),
-        scr === "deliv_cargo" && React.createElement(DelivCargo, null),
-        scr === "deliv_catalog" && React.createElement(DelivCatalog, null),
-        scr === "partner" && React.createElement(PartnerDetail, null),
-        scr === "help" && React.createElement(Help, null),
-        scr === "gas" && React.createElement(Gas, null),
-        scr === "notifications" && React.createElement(Notifications, null),
-        scr === "history" && React.createElement(History, null),
-        scr === "addresses" && React.createElement(Addresses, null),
-        scr === "partner_landing" && React.createElement(PartnerLanding, null)));
+        scr === "checkout" && Checkout(),
+        scr === "tracking" && Tracking(),
+        scr === "deliv_menu" && DelivMenu(),
+        scr === "deliv_ab" && DelivAB(),
+        scr === "deliv_cargo" && DelivCargo(),
+        scr === "deliv_catalog" && DelivCatalog(),
+        scr === "partner" && PartnerDetail(),
+        scr === "help" && Help(),
+        scr === "gas" && Gas(),
+        scr === "notifications" && Notifications(),
+        scr === "history" && History(),
+        scr === "addresses" && Addresses(),
+        scr === "partner_landing" && PartnerLanding()));
 }
 // ════════════════════════════════════════════════════════════════════
 //  PARTNER APP
