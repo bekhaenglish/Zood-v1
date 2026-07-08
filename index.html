@@ -516,6 +516,10 @@ async function osrmRoute(pts) {
         return null;
     }
 }
+function clockAt(minutesFromNow) {
+    const d = new Date(Date.now() + Math.max(0, minutesFromNow) * 60000);
+    return d.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
+}
 function useRoadRoute(stops, setRoadRoute) {
     useEffect(() => {
         const pts = stops.filter(s => s.lat);
@@ -679,6 +683,8 @@ function TaxiScreen({ onBack, onHelp }) {
     const [userLoc, setUserLoc] = useState(null);
     const [roadRoute, setRoadRoute] = useState(null);
     const [carProg, setCarProg] = useState(0);
+    const [driverRoute, setDriverRoute] = useState(null);
+    const [driverProg, setDriverProg] = useState(0);
     const [promo, setPromo] = useState(null);
     const [promoIn, setPromoIn] = useState("");
     const [promoMsg, setPromoMsg] = useState(null);
@@ -746,6 +752,32 @@ function TaxiScreen({ onBack, onHelp }) {
             setMeter(0);
         }
     }, [tStatus]);
+    // Водитель едет к точке подачи — реальный маршрут по дорогам (как в Яндекс Go)
+    const approaching = (tStatus === "found" || tStatus === "arrived") && !!stops[0].lat;
+    useEffect(() => {
+        if (!approaching) {
+            setDriverRoute(null);
+            return;
+        }
+        let alive = true;
+        const start = { lat: stops[0].lat + 0.013, lng: stops[0].lng + 0.019 };
+        osrmRoute([start, { lat: stops[0].lat, lng: stops[0].lng }]).then(r => { if (alive)
+            setDriverRoute(r || null); });
+        return () => { alive = false; };
+    }, [approaching, stops[0].lat, stops[0].lng]);
+    useEffect(() => {
+        if (tStatus === "found") {
+            const t0 = Date.now();
+            setDriverProg(0);
+            const t = setInterval(() => setDriverProg(Math.min(1, (Date.now() - t0) / 4000)), 200);
+            return () => clearInterval(t);
+        }
+        if (tStatus === "arrived")
+            setDriverProg(1);
+        if (tStatus === "idle" || tStatus === "inprogress")
+            setDriverProg(0);
+    }, [tStatus]);
+    const pickupEtaMin = driverRoute && tStatus === "found" ? Math.max(1, Math.round((driverRoute.dur / 60) * (1 - driverProg))) : null;
     function confirmRide() {
         setTStatus("found");
         statusRef.current = "found";
@@ -789,7 +821,7 @@ function TaxiScreen({ onBack, onHelp }) {
     }
     return (React.createElement("div", { style: { display: "flex", flexDirection: "column", height: "100%", background: "#F2F1EE", position: "relative" } },
         React.createElement("div", { style: { flex: 1, position: "relative", overflow: "hidden" } },
-            React.createElement(SchematicMap, { markers: stops.filter(s => s.lat), route: (roadRoute && roadRoute.coords) || (stops.filter(s => s.lat).length >= 2 ? stops.filter(s => s.lat) : null), carProg: tStatus === "inprogress" ? carProg : null, follow: tStatus === "inprogress", userLoc: userLoc, etaMin: roadRoute && roadRoute.dur && tStatus === "idle" ? Math.max(1, Math.round(roadRoute.dur / 60)) : null, fitKey: stops.map(s => s.lat ? s.lat.toFixed(4) : "").join("|") }),
+            React.createElement(SchematicMap, { markers: approaching ? [stops[0]] : stops.filter(s => s.lat), route: approaching ? (driverRoute && driverRoute.coords) : ((roadRoute && roadRoute.coords) || (stops.filter(s => s.lat).length >= 2 ? stops.filter(s => s.lat) : null)), carProg: approaching ? driverProg : (tStatus === "inprogress" ? carProg : null), follow: approaching || tStatus === "inprogress", userLoc: userLoc, etaMin: approaching ? pickupEtaMin : (roadRoute && roadRoute.dur && tStatus === "idle" ? Math.max(1, Math.round(roadRoute.dur / 60)) : null), fitKey: (approaching ? "appr|" + (driverRoute ? driverRoute.dist : 0) : stops.map(s => s.lat ? s.lat.toFixed(4) : "").join("|")) }),
             React.createElement("button", { onClick: locate, style: { position: "absolute", right: 12, bottom: 64, width: 42, height: 42, borderRadius: "50%", background: WH, border: "none", boxShadow: "0 3px 12px rgba(0,0,0,.2)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", zIndex: 5 } },
                 React.createElement(Icon, { name: "compass", size: 20, color: GR })),
             roadRoute && roadRoute.dur && tStatus === "idle" && React.createElement("div", { style: { position: "absolute", top: 10, left: "50%", transform: "translateX(-50%)", background: "rgba(255,255,255,.95)", borderRadius: 12, padding: "5px 12px", display: "flex", gap: 8, alignItems: "center", boxShadow: "0 2px 10px rgba(0,0,0,.15)", zIndex: 5 } },
@@ -800,6 +832,15 @@ function TaxiScreen({ onBack, onHelp }) {
                 React.createElement("span", { style: { fontWeight: 700, fontSize: 12, color: DK } },
                     (roadRoute.dist / 1000).toFixed(1),
                     " \u043A\u043C")),
+            approaching && pickupEtaMin != null && React.createElement("div", { style: { position: "absolute", top: 10, left: "50%", transform: "translateX(-50%)", background: "rgba(13,27,42,.88)", borderRadius: 12, padding: "6px 14px", display: "flex", gap: 8, alignItems: "center", boxShadow: "0 2px 10px rgba(0,0,0,.25)", zIndex: 5 } },
+                React.createElement("span", { style: { fontWeight: 800, fontSize: 12, color: "#FFDE40" } },
+                    "\u041F\u043E\u0434\u0430\u0447\u0430 ~",
+                    pickupEtaMin,
+                    " \u043C\u0438\u043D"),
+                React.createElement("span", { style: { color: "rgba(255,255,255,.4)", fontSize: 11 } }, "\u00B7"),
+                React.createElement("span", { style: { fontWeight: 600, fontSize: 12, color: WH } },
+                    "\u043F\u0440\u0438\u0431\u044B\u0442\u0438\u0435 \u0432 ",
+                    clockAt(pickupEtaMin))),
             tStatus === "idle" && tTariff && React.createElement("div", { style: { position: "absolute", bottom: 12, left: "50%", transform: "translateX(-50%)", background: "rgba(255,255,255,.96)", borderRadius: 14, padding: "6px 16px", boxShadow: "0 4px 16px rgba(0,0,0,.15)", display: "flex", gap: 10, alignItems: "center" } },
                 React.createElement("span", { style: { fontWeight: 800, fontSize: 13, color: DK } },
                     "\u2248 ",
@@ -876,7 +917,13 @@ function TaxiScreen({ onBack, onHelp }) {
                 React.createElement("div", { style: { background: WH, borderRadius: 20, padding: 16, boxShadow: "0 6px 26px rgba(0,0,0,.10)" } },
                     React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 13 } },
                         React.createElement("div", null,
-                            React.createElement("div", { style: { fontWeight: 800, fontSize: 16, color: DK } }, "\u0427\u0435\u0440\u0435\u0437 \u2248 3 \u043C\u0438\u043D \u043F\u0440\u0438\u0435\u0434\u0435\u0442"),
+                            React.createElement("div", { style: { fontWeight: 800, fontSize: 16, color: DK } },
+                                "\u0427\u0435\u0440\u0435\u0437 \u2248",
+                                pickupEtaMin || 3,
+                                " \u043C\u0438\u043D \u043F\u0440\u0438\u0435\u0434\u0435\u0442"),
+                            React.createElement("div", { style: { fontSize: 11, color: GY, marginTop: 1 } },
+                                "\u041F\u0440\u0438\u0431\u044B\u0442\u0438\u0435 \u0432 ",
+                                clockAt(pickupEtaMin || 3)),
                             React.createElement("div", { style: { fontSize: 12, color: GY, marginTop: 2 } }, "\u0411\u0435\u043B\u0430\u044F Chevrolet Nexia 3")),
                         React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 7, background: BG, borderRadius: 12, padding: "6px 10px" } },
                             React.createElement("span", { style: { fontSize: 11, fontWeight: 800, color: DK } }, "1234 AB"))),
@@ -2909,7 +2956,7 @@ function DriverApp({ orders, onUpdate }) {
             }).addTo(map);
             L.control.zoom({ position: "bottomright" }).addTo(map);
             // Car icon
-            const carIcon = L.divIcon({ html: `<div style="font-size:28px;filter:drop-shadow(0 3px 8px rgba(0,0,0,.5))"><Icon name="car" size={15} color="currentColor"/></div>`, iconSize: [34, 34], iconAnchor: [17, 17], className: "" });
+            const carIcon = L.divIcon({ html: `<div style="width:34px;height:34px;border-radius:50%;background:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 3px 12px rgba(0,0,0,.35);border:2px solid #2E7D32"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2E7D32" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 11l1.5-4.5A2 2 0 018.4 5h7.2a2 2 0 011.9 1.5L19 11"/><rect x="3" y="11" width="18" height="6" rx="1.5"/><circle cx="7.5" cy="17.5" r="1.5"/><circle cx="16.5" cy="17.5" r="1.5"/></svg></div>`, iconSize: [34, 34], iconAnchor: [17, 17], className: "" });
             driverMk.current = L.marker([DPOS.lat, DPOS.lng], { icon: carIcon, zIndexOffset: 1000 }).addTo(map);
             // Pulse ring
             if (!document.getElementById("drv-pulse2")) {
@@ -3123,6 +3170,9 @@ function DriverApp({ orders, onUpdate }) {
                     React.createElement("div", { style: { textAlign: "right" } },
                         React.createElement("div", { style: { color: WH, fontWeight: 900, fontSize: 18 } }, routeInfo?.min || "?"),
                         React.createElement("div", { style: { color: "rgba(255,255,255,.55)", fontSize: 9 } }, "\u043C\u0438\u043D"))),
+                routeInfo?.min != null && React.createElement("div", { style: { marginTop: 6, fontSize: 10.5, color: "rgba(255,255,255,.65)" } },
+                    "\u041F\u0440\u0438\u0431\u044B\u0442\u0438\u0435 \u0432 ",
+                    clockAt(routeInfo.min)),
                 routeInfo?.steps[curStep + 1] && React.createElement("div", { style: { marginTop: 7, paddingTop: 7, borderTop: "1px solid rgba(255,255,255,.15)", fontSize: 11, color: "rgba(255,255,255,.55)" } },
                     "\u0417\u0430\u0442\u0435\u043C: ",
                     routeInfo.steps[curStep + 1].text)),
