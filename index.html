@@ -4,8 +4,15 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
 <meta name="theme-color" content="#00B341"/>
+<meta name="description" content="ZOOD — такси, межгород, доставка еды и товаров, грузоперевозки. Суперприложение для Таджикистана."/>
+<meta name="mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+<meta name="apple-mobile-web-app-title" content="ZOOD"/>
 <title>ZOOD — Такси · Доставка · Грузы</title>
+<link rel="manifest" href="manifest.json"/>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Crect width='48' height='48' rx='12' fill='%2300B341'/%3E%3Cpath d='M15 15 H33 L17 31 H34' fill='none' stroke='%23fff' stroke-width='4.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3Ccircle cx='34' cy='31' r='3.4' fill='%23fff'/%3E%3C/svg%3E"/>
+<link rel="apple-touch-icon" href="icon-192.png"/>
 <style>
   *{box-sizing:border-box}
   html,body{margin:0;padding:0;height:100%;background:#0D1B2A;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;-webkit-font-smoothing:antialiased}
@@ -14,6 +21,12 @@
   @keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
   @keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
   @keyframes slideIn{from{transform:translateX(100%)}to{transform:translateX(0)}}
+  button:not([style*="translate"]):active{transform:scale(.96)}
+  button{transition:transform .12s ease}
+  @keyframes confFall{0%{transform:translateY(-12px) rotate(0deg);opacity:1}100%{transform:translateY(260px) rotate(560deg);opacity:0}}
+  @keyframes shineSweep{0%{transform:translateX(-140%) skewX(-18deg)}55%,100%{transform:translateX(320%) skewX(-18deg)}}
+  @keyframes popIn{from{opacity:0;transform:scale(.9)}to{opacity:1;transform:scale(1)}}
+  @keyframes sheetUp{from{transform:translateY(100%)}to{transform:translateY(0)}}
   #loader{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#0D1B2A;z-index:9999;transition:opacity .4s}
   #loader.hide{opacity:0;pointer-events:none}
   .zl{width:74px;height:74px;border-radius:20px;background:linear-gradient(135deg,#00C947,#009E37);display:flex;align-items:center;justify-content:center;animation:zp 1.4s ease-in-out infinite}
@@ -601,6 +614,19 @@ function bezier(from, to, steps = 40) {
 }
 ;
 // Способы оплаты (локальные для Таджикистана)
+function Confetti({ n = 26 }) {
+    const cols = ["#00B341", "#F5C400", "#E53935", "#1A73E8", "#FF7A00", "#9333EA"];
+    return React.createElement("div", { style: { position: "absolute", inset: 0, overflow: "hidden", pointerEvents: "none", zIndex: 60 } }, Array.from({ length: n }).map((_, i) => React.createElement("div", { key: i, style: { position: "absolute", top: -10, left: ((i * 137 + 23) % 100) + "%", width: 6 + (i % 3) * 3, height: 9 + (i % 4) * 3, background: cols[i % cols.length], borderRadius: 2, animation: `confFall ${(1.5 + (i % 5) * .28).toFixed(2)}s ${((i % 7) * .13).toFixed(2)}s ease-in forwards` } })));
+}
+const TJ_CITY_LIST = [
+    { n: "Душанбе", lat: 38.5598, lng: 68.787 },
+    { n: "Худжанд", lat: 40.2826, lng: 69.6222 },
+    { n: "Бохтар", lat: 37.8364, lng: 68.7803 },
+    { n: "Куляб", lat: 37.9146, lng: 69.7845 },
+    { n: "Истаравшан", lat: 39.9108, lng: 69.0064 },
+    { n: "Турсунзаде", lat: 38.5108, lng: 68.2306 },
+    { n: "Хорог", lat: 37.4897, lng: 71.5533 },
+];
 const RIDE_PAY = [
     { id: "cash", icon: "money", label: "Наличными", sub: "" },
     { id: "dc", icon: "card", label: "Душанбе Сити", sub: "Городской кошелёк" },
@@ -639,11 +665,38 @@ function TaxiScreen({ onBack, onHelp }) {
     const [userLoc, setUserLoc] = useState(null);
     const [roadRoute, setRoadRoute] = useState(null);
     const [carProg, setCarProg] = useState(0);
+    const [promo, setPromo] = useState(null);
+    const [promoIn, setPromoIn] = useState("");
+    const [promoMsg, setPromoMsg] = useState(null);
+    const [when, setWhen] = useState(null);
+    const [showWhen, setShowWhen] = useState(false);
+    const [sched, setSched] = useStore("zood_sched_v1", null);
+    const [tip, setTip] = useState(0);
+    const [showSOS, setShowSOS] = useState(false);
+    const [okToast, setOkToast] = useState(null);
     const geoTimer = useRef(null);
     const statusRef = useRef("idle");
     const distKm = roadRoute && roadRoute.dist ? Math.max(1, Math.round(roadRoute.dist / 100) / 10) : Math.round(8 + stops.filter(s => s.addr).length * 4);
     const interCity = distKm > 80;
     const canOrder = stops[0].addr && stops[stops.length - 1].addr && tTariff;
+    const TAXI_PROMOS = { NAVRUZ: 20, ZOOD10: 10, SALOM: 15 };
+    const priceBase = tTariff ? Math.round(distKm * 3 + tTariff.base) : 0;
+    const priceFinal = promo ? Math.max(1, Math.round(priceBase * (1 - promo.pct / 100))) : priceBase;
+    function applyPromo() {
+        const c = promoIn.trim().toUpperCase();
+        if (!c) return;
+        if (TAXI_PROMOS[c]) { setPromo({ code: c, pct: TAXI_PROMOS[c] }); setPromoMsg({ ok: true, t: `−${TAXI_PROMOS[c]}% применено 🎉` }); }
+        else setPromoMsg({ ok: false, t: "Код не найден" });
+        setPromoIn("");
+        setTimeout(() => setPromoMsg(null), 2600);
+    }
+    function flashOk(t) { setOkToast(t); setTimeout(() => setOkToast(null), 2300); }
+    function shareRide() {
+        const code = Math.random().toString(36).slice(2, 8).toUpperCase();
+        const txt = `🚕 Я еду в ZOOD\n${stops[0].addr} → ${stops[stops.length - 1].addr}\nВодитель: Хасан Р. · Nexia 3 · 1234 AB\nСледить онлайн: https://zood.tj/t/${code}`;
+        if (navigator.share) { navigator.share({ title: "Моя поездка ZOOD", text: txt }).catch(() => { }); }
+        else { try { navigator.clipboard.writeText(txt); } catch (e) { } flashOk("Ссылка на поездку скопирована"); }
+    }
     useRoadRoute(stops, setRoadRoute);
     function locate() {
         if (typeof navigator === "undefined" || !navigator.geolocation)
@@ -719,7 +772,7 @@ function TaxiScreen({ onBack, onHelp }) {
     }
     return (React.createElement("div", { style: { display: "flex", flexDirection: "column", height: "100%", background: "#F2F1EE", position: "relative" } },
         React.createElement("div", { style: { flex: 1, position: "relative", overflow: "hidden" } },
-            React.createElement(SchematicMap, { markers: stops.filter(s => s.lat), route: (roadRoute && roadRoute.coords) || (stops.filter(s => s.lat).length >= 2 ? stops.filter(s => s.lat) : null), carProg: tStatus === "inprogress" ? carProg : null, follow: tStatus === "inprogress", userLoc: userLoc, fitKey: stops.map(s => s.lat ? s.lat.toFixed(4) : "").join("|") }),
+            React.createElement(SchematicMap, { markers: stops.filter(s => s.lat), route: (roadRoute && roadRoute.coords) || (stops.filter(s => s.lat).length >= 2 ? stops.filter(s => s.lat) : null), carProg: tStatus === "inprogress" ? carProg : null, follow: tStatus === "inprogress", userLoc: userLoc, etaMin: roadRoute && roadRoute.dur && tStatus === "idle" ? Math.max(1, Math.round(roadRoute.dur / 60)) : null, fitKey: stops.map(s => s.lat ? s.lat.toFixed(4) : "").join("|") }),
             React.createElement("button", { onClick: locate, style: { position: "absolute", right: 12, bottom: 64, width: 42, height: 42, borderRadius: "50%", background: WH, border: "none", boxShadow: "0 3px 12px rgba(0,0,0,.2)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", zIndex: 5 } },
                 React.createElement(Icon, { name: "compass", size: 20, color: GR })),
             roadRoute && roadRoute.dur && tStatus === "idle" && React.createElement("div", { style: { position: "absolute", top: 10, left: "50%", transform: "translateX(-50%)", background: "rgba(255,255,255,.95)", borderRadius: 12, padding: "5px 12px", display: "flex", gap: 8, alignItems: "center", boxShadow: "0 2px 10px rgba(0,0,0,.15)", zIndex: 5 } },
@@ -737,12 +790,19 @@ function TaxiScreen({ onBack, onHelp }) {
                     " \u043A\u043C"),
                 React.createElement("span", { style: { color: MG } }, "\u00B7"),
                 React.createElement("span", { style: { fontWeight: 700, fontSize: 13, color: tTariff.col } },
+                    promo && React.createElement("s", { style: { color: MG, fontWeight: 500, marginRight: 5, fontSize: 11 } }, priceBase),
                     "~",
-                    Math.round(distKm * 3 + tTariff.base),
+                    priceFinal,
                     " \u0441."))),
         React.createElement("div", { style: { background: WH, borderRadius: "22px 22px 0 0", boxShadow: "0 -6px 32px rgba(0,0,0,.1)", flexShrink: 0, maxHeight: "62%", overflowY: "auto" } },
             React.createElement("div", { style: { width: 38, height: 4, background: BD, borderRadius: 2, margin: "10px auto 0" } }),
             tStatus === "idle" && React.createElement("div", { style: { padding: "10px 14px 16px" } },
+                sched && React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 9, background: GDL, border: `1.5px solid ${GD}66`, borderRadius: 13, padding: "9px 12px", marginBottom: 10, animation: "popIn .25s ease" } },
+                    React.createElement("span", { style: { fontSize: 16 } }, "\uD83D\uDDD3"),
+                    React.createElement("div", { style: { flex: 1, minWidth: 0 } },
+                        React.createElement("div", { style: { fontSize: 11.5, fontWeight: 800, color: "#92400E" } }, "\u0417\u0430\u043F\u043B\u0430\u043D\u0438\u0440\u043E\u0432\u0430\u043D\u0430 \u00B7 ", sched.label),
+                        React.createElement("div", { style: { fontSize: 10, color: "#B45309", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" } }, sched.from, " \u2192 ", sched.to, " \u00B7 ~", sched.price, " \u0441.")),
+                    React.createElement("button", { onClick: () => setSched(null), style: { border: "none", background: "none", color: "#92400E", fontSize: 15, cursor: "pointer", padding: 4, flexShrink: 0 } }, "\u2715")),
                 React.createElement("div", { style: { background: BG, borderRadius: 16, overflow: "hidden", marginBottom: 10, position: "relative" } },
                     stops.map((s, idx) => (React.createElement("div", { key: s.id, style: { display: "flex", alignItems: "center", gap: 10, padding: "11px 14px", borderBottom: idx < stops.length - 1 ? `1px solid ${BD}` : "none" } },
                         React.createElement("div", { style: { width: 10, height: 10, borderRadius: idx === 0 ? "50%" : "3px", background: idx === 0 ? "#2E7D32" : idx === stops.length - 1 ? R : GD, flexShrink: 0 } }),
@@ -762,17 +822,34 @@ function TaxiScreen({ onBack, onHelp }) {
                         t.price,
                         " \u0441."))))),
                 tTariff && canOrder && React.createElement("div", { style: { background: tTariff.col + "18", border: `1px solid ${tTariff.col}33`, borderRadius: 12, padding: "8px 13px", marginBottom: 10, display: "flex", justifyContent: "space-between", alignItems: "center" } },
-                    React.createElement("span", { style: { fontSize: 11, color: DK, fontWeight: 600 } }, "\u041E\u0440\u0438\u0435\u043D\u0442. \u0441\u0442\u043E\u0438\u043C\u043E\u0441\u0442\u044C"),
+                    React.createElement("span", { style: { fontSize: 11, color: DK, fontWeight: 600 } }, promo ? `Со скидкой ${promo.code}` : "\u041E\u0440\u0438\u0435\u043D\u0442. \u0441\u0442\u043E\u0438\u043C\u043E\u0441\u0442\u044C"),
                     React.createElement("span", { style: { fontWeight: 900, fontSize: 15, color: tTariff.col } },
+                        promo && React.createElement("s", { style: { color: MG, fontWeight: 500, fontSize: 12, marginRight: 6 } }, priceBase),
                         "~",
-                        Math.round(distKm * 3 + tTariff.base),
+                        priceFinal,
                         " \u0441.")),
-                React.createElement("button", { onClick: () => { if (canOrder) {
+                React.createElement("div", { style: { display: "flex", gap: 7, marginBottom: 10 } },
+                    React.createElement("button", { onClick: () => setShowWhen(true), style: { flexShrink: 0, padding: "9px 12px", background: when ? GDL : BG, border: `1.5px solid ${when ? GD : BD}`, borderRadius: 12, fontSize: 11.5, fontWeight: 700, color: when ? "#92400E" : SL, cursor: "pointer", fontFamily: "inherit", display: "flex", alignItems: "center", gap: 5 } }, "\uD83D\uDD52 ", when ? when.label : "\u0421\u0435\u0439\u0447\u0430\u0441", " \u25BE"),
+                    promo
+                        ? React.createElement("div", { style: { flex: 1, display: "flex", alignItems: "center", gap: 6, background: RL, border: `1.5px solid ${R}55`, borderRadius: 12, padding: "0 10px" } },
+                            React.createElement("span", { style: { fontSize: 11.5, fontWeight: 800, color: RD, flex: 1 } }, promo.code, " \u00B7 \u2212", promo.pct, "%"),
+                            React.createElement("button", { onClick: () => setPromo(null), style: { border: "none", background: "none", color: RD, fontSize: 14, cursor: "pointer", padding: 4 } }, "\u2715"))
+                        : React.createElement("div", { style: { flex: 1, display: "flex", gap: 6 } },
+                            React.createElement("input", { value: promoIn, onChange: e => setPromoIn(e.target.value), placeholder: "\u041F\u0440\u043E\u043C\u043E\u043A\u043E\u0434", style: { flex: 1, minWidth: 0, border: `1.5px solid ${BD}`, borderRadius: 12, padding: "0 11px", fontSize: 12, fontFamily: "inherit", outline: "none", background: BG, textTransform: "uppercase" } }),
+                            React.createElement("button", { onClick: applyPromo, disabled: !promoIn.trim(), style: { padding: "9px 13px", background: promoIn.trim() ? DK : BD, color: WH, border: "none", borderRadius: 12, fontSize: 11.5, fontWeight: 700, cursor: promoIn.trim() ? "pointer" : "default", fontFamily: "inherit" } }, "OK"))),
+                promoMsg && React.createElement("div", { style: { fontSize: 11, fontWeight: 700, color: promoMsg.ok ? GR : R, background: promoMsg.ok ? GRL : RL, borderRadius: 10, padding: "6px 12px", marginBottom: 10, animation: "popIn .25s ease" } }, promoMsg.t),
+                React.createElement("button", { onClick: () => { if (!canOrder) return;
+                        if (when) {
+                            setSched({ label: when.label, from: stops[0].addr, to: stops[stops.length - 1].addr, tariff: tTariff.label, price: priceFinal });
+                            setWhen(null);
+                            flashOk(`Поездка запланирована · ${when.label}`);
+                            return;
+                        }
                         setTStatus("searching");
                         setTimeout(() => { if (statusRef.current === "searching") {
                             confirmRide();
                         } }, 2500);
-                    } }, disabled: !canOrder, style: { width: "100%", padding: 15, background: canOrder ? NV : BD, color: canOrder ? WH : MG, border: "none", borderRadius: 16, fontSize: 14, fontWeight: 800, cursor: canOrder ? "pointer" : "default", boxShadow: canOrder ? `0 6px 20px ${NV}44` : "none", fontFamily: "inherit", transition: "all .2s" } }, canOrder ? `Заказать${stops.length > 2 ? ` · ${stops.length} точки` : ""} · ${tTariff?.label}` : "Введите маршрут и тариф")),
+                    }, disabled: !canOrder, style: { width: "100%", padding: 15, background: canOrder ? (when ? GD : NV) : BD, color: canOrder ? WH : MG, border: "none", borderRadius: 16, fontSize: 14, fontWeight: 800, cursor: canOrder ? "pointer" : "default", boxShadow: canOrder ? `0 6px 20px ${(when ? GD : NV)}44` : "none", fontFamily: "inherit", transition: "all .2s" } }, canOrder ? (when ? `\uD83D\uDD52 Запланировать · ${when.label}` : `Заказать${stops.length > 2 ? ` · ${stops.length} точки` : ""} · ${tTariff?.label}`) : "Введите маршрут и тариф")),
             tStatus === "searching" && React.createElement("div", { style: { padding: "22px", textAlign: "center" } },
                 React.createElement("div", { style: { fontSize: 52, marginBottom: 10, animation: "spin 2s linear infinite", display: "inline-block" } }, "\u23F3"),
                 React.createElement("div", { style: { fontWeight: 800, fontSize: 16, color: DK } }, "\u0418\u0449\u0435\u043C \u0432\u043E\u0434\u0438\u0442\u0435\u043B\u044F..."),
@@ -834,22 +911,42 @@ function TaxiScreen({ onBack, onHelp }) {
                         " ",
                         React.createElement("span", { style: { fontSize: 16, fontWeight: 600, opacity: .8 } }, "\u0441."))),
                 !addingStop
-                    ? React.createElement("div", { style: { display: "flex", gap: 8 } },
-                        React.createElement("button", { onClick: () => setAddingStop(true), style: { flex: 1, padding: "11px 8px", background: BLL, border: `1.5px solid ${BL}`, borderRadius: 13, fontSize: 12, fontWeight: 700, color: BL, cursor: "pointer", fontFamily: "inherit" } }, "\uD83D\uDCCD \u0414\u043E\u0431\u0430\u0432\u0438\u0442\u044C \u0442\u043E\u0447\u043A\u0443"),
-                        React.createElement("button", { onClick: cancelRide, style: { flex: 1, padding: "11px 8px", background: "none", border: `1.5px solid ${R}44`, borderRadius: 13, fontSize: 12, color: R, cursor: "pointer", fontFamily: "inherit" } }, "\u041E\u0442\u043C\u0435\u043D\u0438\u0442\u044C"),
-                        React.createElement("button", { onClick: () => alert("🆘 SOS! Местоположение отправлено!"), style: { padding: "11px 13px", background: R, border: "none", borderRadius: 13, fontSize: 11, fontWeight: 800, color: WH, cursor: "pointer", fontFamily: "inherit", boxShadow: `0 4px 14px ${R}44` } }, "\uD83C\uDD98"))
+                    ? React.createElement("div", null,
+                        React.createElement("div", { style: { display: "flex", gap: 8, marginBottom: 8 } },
+                            React.createElement("button", { onClick: () => setAddingStop(true), style: { flex: 1, padding: "11px 8px", background: BLL, border: `1.5px solid ${BL}`, borderRadius: 13, fontSize: 12, fontWeight: 700, color: BL, cursor: "pointer", fontFamily: "inherit" } }, "\uD83D\uDCCD \u0422\u043E\u0447\u043A\u0430"),
+                            React.createElement("button", { onClick: shareRide, style: { flex: 1, padding: "11px 8px", background: GRL, border: `1.5px solid ${GR}`, borderRadius: 13, fontSize: 12, fontWeight: 700, color: GR, cursor: "pointer", fontFamily: "inherit" } }, "\uD83D\uDCE4 \u041F\u043E\u0434\u0435\u043B\u0438\u0442\u044C\u0441\u044F")),
+                        React.createElement("div", { style: { display: "flex", gap: 8 } },
+                            React.createElement("button", { onClick: cancelRide, style: { flex: 1, padding: "11px 8px", background: "none", border: `1.5px solid ${R}44`, borderRadius: 13, fontSize: 12, color: R, cursor: "pointer", fontFamily: "inherit" } }, "\u041E\u0442\u043C\u0435\u043D\u0438\u0442\u044C"),
+                            React.createElement("button", { onClick: () => setShowSOS(true), style: { padding: "11px 18px", background: R, border: "none", borderRadius: 13, fontSize: 12, fontWeight: 800, color: WH, cursor: "pointer", fontFamily: "inherit", boxShadow: `0 4px 14px ${R}44` } }, "\uD83C\uDD98 SOS")))
                     : React.createElement("div", { style: { background: BG, borderRadius: 13, padding: "10px 12px", border: `1.5px solid ${BD}` } },
                         React.createElement("input", { value: newStopAddr, onChange: e => setNewStopAddr(e.target.value), placeholder: "\u041D\u043E\u0432\u0430\u044F \u0442\u043E\u0447\u043A\u0430 \u043C\u0430\u0440\u0448\u0440\u0443\u0442\u0430...", style: { width: "100%", border: "none", outline: "none", fontSize: 13, color: DK, background: "transparent", marginBottom: 7, fontFamily: "inherit", boxSizing: "border-box" } }),
                         React.createElement("div", { style: { display: "flex", gap: 7 } },
                             React.createElement("button", { onClick: addStopDuringRide, style: { flex: 2, padding: 9, background: newStopAddr.trim() ? R : BD, color: WH, border: "none", borderRadius: 10, fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" } }, "\u0414\u043E\u0431\u0430\u0432\u0438\u0442\u044C"),
                             React.createElement("button", { onClick: () => { setAddingStop(false); setNewStopAddr(""); }, style: { flex: 1, padding: 9, background: "none", border: `1px solid ${BD}`, borderRadius: 10, fontSize: 11, color: GY, cursor: "pointer", fontFamily: "inherit" } }, "\u041E\u0442\u043C\u0435\u043D\u0430")))),
-            tStatus === "done" && React.createElement("div", { style: { padding: "14px 16px", textAlign: "center" } },
-                React.createElement("div", { style: { fontSize: 48, marginBottom: 8 } }, "\uD83C\uDF89"),
+            tStatus === "done" && React.createElement("div", { style: { padding: "14px 16px", textAlign: "center", position: "relative", overflow: "hidden" } },
+                React.createElement(Confetti, null),
+                React.createElement("div", { style: { fontSize: 48, marginBottom: 8, animation: "popIn .35s ease" } }, "\uD83C\uDF89"),
                 React.createElement("div", { style: { fontWeight: 800, fontSize: 17, color: DK, marginBottom: 4 } }, "\u041F\u043E\u0435\u0437\u0434\u043A\u0430 \u0437\u0430\u0432\u0435\u0440\u0448\u0435\u043D\u0430!"),
-                React.createElement("div", { style: { background: NV, borderRadius: 14, padding: "12px 16px", marginBottom: 12, display: "flex", justifyContent: "space-between", alignItems: "center" } },
-                    React.createElement("span", { style: { color: "rgba(255,255,255,.7)", fontSize: 12 } }, "\u0418\u0442\u043E\u0433\u043E \u043F\u043E \u0441\u0447\u0451\u0442\u0447\u0438\u043A\u0443"),
-                    React.createElement("span", { style: { fontWeight: 900, fontSize: 22, color: WH } }, meter > 0 ? `${meter.toFixed(1)} с.` : `${tTariff?.price || 0} с.`)),
-                React.createElement("button", { onClick: onBack, style: { width: "100%", padding: 14, background: R, color: WH, border: "none", borderRadius: 15, fontSize: 14, fontWeight: 800, cursor: "pointer", boxShadow: `0 6px 20px ${R}44`, fontFamily: "inherit" } }, "\u2190 \u041D\u0430 \u0433\u043B\u0430\u0432\u043D\u0443\u044E"))),
+                React.createElement("div", { style: { background: NV, borderRadius: 14, padding: "12px 16px", marginBottom: 10, display: "flex", justifyContent: "space-between", alignItems: "center" } },
+                    React.createElement("span", { style: { color: "rgba(255,255,255,.7)", fontSize: 12 } }, tip > 0 ? "\u0418\u0442\u043E\u0433\u043E + \u0447\u0430\u0435\u0432\u044B\u0435" : "\u0418\u0442\u043E\u0433\u043E \u043F\u043E \u0441\u0447\u0451\u0442\u0447\u0438\u043A\u0443"),
+                    React.createElement("span", { style: { fontWeight: 900, fontSize: 22, color: WH } }, ((meter > 0 ? meter : (tTariff?.price || 0)) + tip).toFixed(1), " \u0441.")),
+                React.createElement("div", { style: { fontSize: 11, fontWeight: 700, color: GY, marginBottom: 7 } }, "\u0420\u0430\u04B3\u043C\u0430\u0442 \u0432\u043E\u0434\u0438\u0442\u0435\u043B\u044E \u00B7 \u0447\u0430\u0435\u0432\u044B\u0435"),
+                React.createElement("div", { style: { display: "flex", gap: 7, marginBottom: 12 } }, [0, 2, 5, 10].map(v => React.createElement("button", { key: v, onClick: () => setTip(v), style: { flex: 1, padding: "10px 4px", background: tip === v ? R : BG, color: tip === v ? WH : DK, border: `1.5px solid ${tip === v ? R : BD}`, borderRadius: 12, fontSize: 12.5, fontWeight: 800, cursor: "pointer", fontFamily: "inherit" } }, v === 0 ? "\u0411\u0435\u0437" : `+${v} \u0441.`))),
+                React.createElement("button", { onClick: onBack, style: { width: "100%", padding: 14, background: R, color: WH, border: "none", borderRadius: 15, fontSize: 14, fontWeight: 800, cursor: "pointer", boxShadow: `0 6px 20px ${R}44`, fontFamily: "inherit" } }, tip > 0 ? `\u0420\u0430\u04B3\u043C\u0430\u0442! \u041E\u043F\u043B\u0430\u0442\u0438\u0442\u044C ${((meter > 0 ? meter : (tTariff?.price || 0)) + tip).toFixed(1)} \u0441.` : "\u2190 \u041D\u0430 \u0433\u043B\u0430\u0432\u043D\u0443\u044E"))),
+        okToast && React.createElement("div", { style: { position: "fixed", top: 70, left: "50%", transform: "translateX(-50%)", background: DK, color: WH, padding: "10px 18px", borderRadius: 14, fontSize: 13, fontWeight: 600, zIndex: 400, whiteSpace: "nowrap", boxShadow: "0 6px 20px rgba(0,0,0,.3)", animation: "popIn .25s ease" } }, "\u2705 ", okToast),
+        showWhen && React.createElement("div", { style: { position: "absolute", inset: 0, background: "rgba(0,0,0,.45)", zIndex: 210, display: "flex", alignItems: "flex-end" }, onClick: () => setShowWhen(false) },
+            React.createElement("div", { onClick: e => e.stopPropagation(), style: { background: WH, borderRadius: "22px 22px 0 0", width: "100%", padding: "16px 16px 28px", animation: "sheetUp .28s ease" } },
+                React.createElement("div", { style: { fontWeight: 800, fontSize: 16, color: DK, marginBottom: 12 } }, "\uD83D\uDD52 \u041A\u043E\u0433\u0434\u0430 \u043F\u043E\u0434\u0430\u0442\u044C \u043C\u0430\u0448\u0438\u043D\u0443?"),
+                [null, "Через 30 мин", "Через 1 час", "Сегодня 18:00", "Завтра 09:00"].map((o, i) => React.createElement("button", { key: i, onClick: () => { setWhen(o ? { label: o } : null); setShowWhen(false); }, style: { width: "100%", padding: "13px 14px", marginBottom: 7, background: (o === null && !when) || (when && when.label === o) ? RL : BG, border: `1.5px solid ${(o === null && !when) || (when && when.label === o) ? R : BD}`, borderRadius: 13, fontSize: 13.5, fontWeight: 700, color: DK, cursor: "pointer", fontFamily: "inherit", textAlign: "left" } }, o === null ? "\u26A1 \u0421\u0435\u0439\u0447\u0430\u0441" : "\uD83D\uDDD3 " + o)))),
+        showSOS && React.createElement("div", { style: { position: "absolute", inset: 0, background: "rgba(0,0,0,.6)", zIndex: 220, display: "flex", alignItems: "flex-end" }, onClick: () => setShowSOS(false) },
+            React.createElement("div", { onClick: e => e.stopPropagation(), style: { background: WH, borderRadius: "22px 22px 0 0", width: "100%", padding: "18px 16px 30px", animation: "sheetUp .28s ease" } },
+                React.createElement("div", { style: { textAlign: "center", marginBottom: 12 } },
+                    React.createElement("div", { style: { width: 58, height: 58, borderRadius: "50%", background: RL, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 8px", fontSize: 28 } }, "\uD83C\uDD98"),
+                    React.createElement("div", { style: { fontWeight: 900, fontSize: 17, color: DK } }, "\u042D\u043A\u0441\u0442\u0440\u0435\u043D\u043D\u0430\u044F \u043F\u043E\u043C\u043E\u0449\u044C"),
+                    React.createElement("div", { style: { fontSize: 11.5, color: GY, marginTop: 3 } }, "\u041C\u0430\u0440\u0448\u0440\u0443\u0442 \u0438 \u0434\u0430\u043D\u043D\u044B\u0435 \u0432\u043E\u0434\u0438\u0442\u0435\u043B\u044F \u0431\u0443\u0434\u0443\u0442 \u043F\u0435\u0440\u0435\u0434\u0430\u043D\u044B \u0441\u043B\u0443\u0436\u0431\u0435")),
+                React.createElement("a", { href: "tel:112", style: { display: "block", textAlign: "center", width: "100%", padding: 15, background: R, color: WH, border: "none", borderRadius: 15, fontSize: 15, fontWeight: 900, cursor: "pointer", textDecoration: "none", marginBottom: 8, boxShadow: `0 6px 20px ${R}55`, boxSizing: "border-box" } }, "\uD83D\uDCDE \u041F\u043E\u0437\u0432\u043E\u043D\u0438\u0442\u044C 112"),
+                React.createElement("button", { onClick: () => { shareRide(); setShowSOS(false); }, style: { width: "100%", padding: 13, background: BG, border: `1.5px solid ${BD}`, borderRadius: 13, fontSize: 13, fontWeight: 700, color: DK, cursor: "pointer", fontFamily: "inherit", marginBottom: 8 } }, "\uD83D\uDCCD \u041E\u0442\u043F\u0440\u0430\u0432\u0438\u0442\u044C \u0433\u0435\u043E\u043F\u043E\u0437\u0438\u0446\u0438\u044E \u0431\u043B\u0438\u0437\u043A\u0438\u043C"),
+                React.createElement("button", { onClick: () => { setShowSOS(false); flashOk("\u0421\u043B\u0443\u0436\u0431\u0430 ZOOD \u0441\u0432\u044F\u0436\u0435\u0442\u0441\u044F \u0441 \u0432\u0430\u043C\u0438"); }, style: { width: "100%", padding: 13, background: NV, color: WH, border: "none", borderRadius: 13, fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" } }, "\uD83D\uDEE1 \u0421\u043B\u0443\u0436\u0431\u0430 \u0431\u0435\u0437\u043E\u043F\u0430\u0441\u043D\u043E\u0441\u0442\u0438 ZOOD 24/7"))),
         showCancel && React.createElement("div", { style: { position: "absolute", inset: 0, background: "rgba(0,0,0,.5)", zIndex: 200, display: "flex", alignItems: "flex-end" } },
             React.createElement("div", { style: { background: WH, borderRadius: "22px 22px 0 0", width: "100%", padding: "18px 18px 32px", textAlign: "center" } },
                 React.createElement("div", { style: { fontSize: 38, marginBottom: 8 } }, "\u274C"),
@@ -1208,105 +1305,231 @@ function interpLL(route, t) {
     }
     return { ...route[route.length - 1], seg: route.length - 2 };
 }
-function SchematicMap({ markers, route, carProg, picking, onPick, fitKey, follow }) {
-    const W = 390, H = 520;
-    const [center, setCenter] = useState({ lat: 38.56, lng: 68.77 });
-    const [zoom, setZoom] = useState(13);
-    const dragRef = useRef(null);
-    const movedRef = useRef(false);
-    // Авто-подгонка под маршрут/точки
+// ═══ REAL MAP (Leaflet · CartoDB Voyager · стиль Яндекс) ═══
+function loadLeafletOnce() {
+    if (window.__lfP)
+        return window.__lfP;
+    window.__lfP = new Promise((res) => {
+        if (!document.getElementById("lf-css")) {
+            const l = document.createElement("link");
+            l.id = "lf-css";
+            l.rel = "stylesheet";
+            l.href = "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css";
+            document.head.appendChild(l);
+        }
+        if (window.L)
+            return res(window.L);
+        const s = document.createElement("script");
+        s.src = "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js";
+        s.onload = () => res(window.L);
+        document.head.appendChild(s);
+    });
+    return window.__lfP;
+}
+(function injectMapCss() {
+    if (document.getElementById("zood-map-css"))
+        return;
+    const st = document.createElement("style");
+    st.id = "zood-map-css";
+    st.textContent = `
+.leaflet-container{background:#EDEBE6;font-family:inherit}
+.zm-pin{filter:drop-shadow(0 3px 5px rgba(0,0,0,.3))}
+.zm-eta{background:#FFDE40;color:#111;font-weight:900;font-size:13px;padding:5px 10px;border-radius:12px;white-space:nowrap;box-shadow:0 3px 10px rgba(0,0,0,.25);border:2px solid #fff;text-align:center;line-height:1.15}
+.zm-eta small{display:block;font-size:9px;font-weight:700;color:#6b5b00}
+.zm-a{width:20px;height:20px;border-radius:50%;background:#fff;border:5px solid #111;box-shadow:0 2px 6px rgba(0,0,0,.3)}
+.zm-wp{width:20px;height:20px;border-radius:50%;background:#D97706;border:3px solid #fff;color:#fff;font-size:10px;font-weight:800;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(0,0,0,.3)}
+.zm-car{width:34px;height:34px;border-radius:50%;background:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 3px 12px rgba(0,0,0,.35);border:2px solid #00B341}
+.zm-car svg{transition:transform .8s linear}
+.zm-user{position:relative;width:18px;height:18px}
+.zm-user .dot{position:absolute;inset:0;border-radius:50%;background:#1A73E8;border:3px solid #fff;box-shadow:0 1px 5px rgba(0,0,0,.35)}
+.zm-user .ping{position:absolute;inset:-4px;border-radius:50%;background:#1A73E8;opacity:.35;animation:zping 2s ease-out infinite}
+@keyframes zping{0%{transform:scale(.6);opacity:.5}100%{transform:scale(2.6);opacity:0}}
+`;
+    document.head.appendChild(st);
+})();
+function bearingLL(a, b) {
+    const dLng = (b.lng - a.lng) * Math.cos((a.lat + b.lat) / 2 * Math.PI / 180);
+    return Math.atan2(dLng, b.lat - a.lat) * 180 / Math.PI;
+}
+function SchematicMap({ markers, route, carProg, picking, onPick, fitKey, follow, userLoc, etaMin }) {
+    const boxRef = useRef(null);
+    const mapRef = useRef(null);
+    const lyRef = useRef({ route: null, marks: null, car: null, user: null });
+    const [ready, setReady] = useState(false);
+    const pickRef = useRef(onPick);
+    pickRef.current = onPick;
+    // ── init ──
     useEffect(() => {
-        if (!markers || markers.length === 0)
-            return;
-        if (markers.length === 1) {
-            setCenter({ lat: markers[0].lat, lng: markers[0].lng });
-            setZoom(14);
-            return;
-        }
-        let mnLa = 90, mxLa = -90, mnLn = 180, mxLn = -180;
-        markers.forEach(m => { mnLa = Math.min(mnLa, m.lat); mxLa = Math.max(mxLa, m.lat); mnLn = Math.min(mnLn, m.lng); mxLn = Math.max(mxLn, m.lng); });
-        const cLa = (mnLa + mxLa) / 2, cLn = (mnLn + mxLn) / 2;
-        let z = 16;
-        for (; z > 2; z--) {
-            const b = visBounds(cLa, cLn, z, W, H);
-            if (b.n >= mxLa && b.s <= mnLa && b.e >= mxLn && b.w <= mnLn)
-                break;
-        }
-        setCenter({ lat: cLa, lng: cLn });
-        setZoom(Math.max(4, z - 1));
-    }, [fitKey]);
-    // Следование за машиной во время поездки
+        let dead = false;
+        loadLeafletOnce().then((L) => {
+            if (dead || !boxRef.current || mapRef.current)
+                return;
+            const map = L.map(boxRef.current, { zoomControl: false, attributionControl: false, preferCanvas: true });
+            map.setView(window.__zoodCenter || [38.5598, 68.787], 13);
+            L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", { maxZoom: 19, subdomains: "abcd" }).addTo(map);
+            L.control.attribution({ position: "bottomleft", prefix: false }).addAttribution("© OSM · CARTO").addTo(map);
+            map.on("click", (e) => { if (pickRef.current)
+                pickRef.current(e.latlng.lat, e.latlng.lng); });
+            mapRef.current = map;
+            const ro = new ResizeObserver(() => { try {
+                map.invalidateSize();
+            }
+            catch (e) { } });
+            ro.observe(boxRef.current);
+            map.__ro = ro;
+            setTimeout(() => map.invalidateSize(), 80);
+            setReady(true);
+        });
+        return () => {
+            dead = true;
+            if (mapRef.current) {
+                if (mapRef.current.__ro)
+                    mapRef.current.__ro.disconnect();
+                mapRef.current.remove();
+                mapRef.current = null;
+            }
+        };
+    }, []);
+    // ── маршрут (стиль Яндекс: белая подложка + зелёная линия + «пробки») ──
+    const routeKey = route && route.length >= 2 ? route.length + "|" + route[0].lat.toFixed(4) + "|" + route[route.length - 1].lat.toFixed(4) + "|" + route[route.length - 1].lng.toFixed(4) : "0";
     useEffect(() => {
-        if (carProg != null && route && route.length >= 2 && follow) {
-            const p = interpLL(route, carProg);
-            setCenter({ lat: p.lat, lng: p.lng });
-        }
-    }, [carProg]);
-    function ptToLL(e) {
-        const r = e.currentTarget.getBoundingClientRect();
-        const px = (e.clientX - r.left) / r.width * W, py = (e.clientY - r.top) / r.height * H;
-        return unprojLL(px, py, center.lat, center.lng, zoom, W, H);
-    }
-    function onDown(e) { dragRef.current = { x: e.clientX, y: e.clientY, cLat: center.lat, cLng: center.lng }; movedRef.current = false; }
-    function onMove(e) {
-        if (!dragRef.current)
+        const L = window.L, map = mapRef.current;
+        if (!ready || !L || !map)
             return;
-        const r = e.currentTarget.getBoundingClientRect();
-        const dx = (e.clientX - dragRef.current.x) / r.width * W, dy = (e.clientY - dragRef.current.y) / r.height * H;
-        if (Math.abs(dx) > 3 || Math.abs(dy) > 3)
-            movedRef.current = true;
-        const scale = 256 * Math.pow(2, zoom);
-        const mx = (mercX(dragRef.current.cLng) * scale - dx) / scale, my = (mercY(dragRef.current.cLat) * scale - dy) / scale;
-        setCenter({ lat: 180 / Math.PI * Math.atan(Math.sinh(Math.PI * (1 - 2 * my))), lng: mx * 360 - 180 });
-    }
-    function onUp(e) {
-        const wasDrag = movedRef.current;
-        dragRef.current = null;
-        if (!wasDrag && picking && onPick) {
-            const ll = ptToLL(e);
-            onPick(ll.lat, ll.lng);
+        if (lyRef.current.route) {
+            map.removeLayer(lyRef.current.route);
+            lyRef.current.route = null;
         }
-    }
-    const streets = zoom >= 11 ? genStreets(center.lat, center.lng, zoom, W, H) : [];
-    const carPos = (carProg != null && route && route.length >= 2) ? interpLL(route, carProg) : null;
-    const sp = (lat, lng) => projXY(lat, lng, center.lat, center.lng, zoom, W, H);
-    return (React.createElement("div", { style: { position: "absolute", inset: 0, overflow: "hidden", background: "#AAD3DF" } },
-        React.createElement("svg", { viewBox: `0 0 ${W} ${H}`, style: { position: "absolute", inset: 0, width: "100%", height: "100%", cursor: picking ? "crosshair" : "grab", touchAction: "none" }, onPointerDown: onDown, onPointerMove: onMove, onPointerUp: onUp, onPointerLeave: () => dragRef.current = null },
-            React.createElement("rect", { x: "0", y: "0", width: W, height: H, fill: "#AAD3DF" }),
-            WORLD_LAND.map((poly, i) => (React.createElement("polygon", { key: i, points: poly.split(" ").map(p => { const [ln, la] = p.split(",").map(Number); const q = sp(la, ln); return `${q.x},${q.y}`; }).join(" "), fill: "#D8E8D0", stroke: "#C0D8B8", strokeWidth: "0.5" }))),
-            React.createElement("polygon", { points: TJ_OUTLINE.split(" ").map(p => { const [ln, la] = p.split(",").map(Number); const q = sp(la, ln); return `${q.x},${q.y}`; }).join(" "), fill: "#FCE8D6", stroke: "#E8A05C", strokeWidth: "1.5" }),
-            streets.map((s, i) => (React.createElement("line", { key: i, x1: s.x1, y1: s.y1, x2: s.x2, y2: s.y2, stroke: "#FFFFFF", strokeWidth: s.major ? 5 : 2.5, strokeLinecap: "round", opacity: s.major ? 0.95 : 0.7 }))),
-            zoom >= 6 && zoom <= 10 && TJ_NEIGHBORS.map(c => { const q = sp(c.lat, c.lng); return React.createElement("text", { key: c.n, x: q.x, y: q.y, fontSize: "9", fill: "#8B7355", textAnchor: "middle", fontWeight: "700", opacity: ".6" }, c.n); }),
-            TJ_CITIES.map(c => {
-                const q = sp(c.lat, c.lng);
-                const show = c.big || zoom >= 8;
-                if (!show)
-                    return null;
-                return (React.createElement("g", { key: c.n },
-                    React.createElement("circle", { cx: q.x, cy: q.y, r: c.big ? 4 : 3, fill: "#C42B0A", stroke: "#fff", strokeWidth: "1.5" }),
-                    zoom >= 7 && React.createElement("text", { x: q.x + 6, y: q.y + 3, fontSize: c.big ? 9 : 8, fill: "#5A4632", fontWeight: c.big ? "700" : "500" }, c.n)));
-            }),
-            route && route.length >= 2 && React.createElement(React.Fragment, null,
-                React.createElement("polyline", { points: route.map(p => { const q = sp(p.lat, p.lng); return `${q.x},${q.y}`; }).join(" "), fill: "none", stroke: "rgba(0,0,0,.12)", strokeWidth: "8", strokeLinecap: "round", strokeLinejoin: "round" }),
-                React.createElement("polyline", { points: route.map(p => { const q = sp(p.lat, p.lng); return `${q.x},${q.y}`; }).join(" "), fill: "none", stroke: "#1A56DB", strokeWidth: "5", strokeLinecap: "round", strokeLinejoin: "round" })),
-            (markers || []).map((m, i) => {
-                const q = sp(m.lat, m.lng);
-                const col = i === 0 ? "#2E7D32" : (i === markers.length - 1 ? "#C42B0A" : "#1565C0");
-                return (React.createElement("g", { key: i },
-                    React.createElement("circle", { cx: q.x, cy: q.y, r: "11", fill: col, opacity: ".18" }),
-                    React.createElement("circle", { cx: q.x, cy: q.y, r: "7", fill: col, stroke: "#fff", strokeWidth: "2.5" })));
-            }),
-            carPos && (() => {
-                const q = sp(carPos.lat, carPos.lng);
-                return (React.createElement("g", null,
-                    React.createElement("circle", { cx: q.x, cy: q.y, r: "14", fill: "#1A56DB", opacity: ".15" }),
-                    React.createElement("circle", { cx: q.x, cy: q.y, r: "10", fill: "#1A56DB", stroke: "#fff", strokeWidth: "2.5" }),
-                    React.createElement("text", { x: q.x, y: q.y + 5, fontSize: "13", textAnchor: "middle" }, "\uD83D\uDE95")));
-            })()),
-        React.createElement("div", { style: { position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", display: "flex", flexDirection: "column", gap: 6 } },
-            React.createElement("button", { onClick: () => setZoom(z => Math.min(16, z + 1)), style: { width: 38, height: 38, background: "#fff", border: "none", borderRadius: 11, boxShadow: "0 2px 10px rgba(0,0,0,.18)", fontSize: 20, fontWeight: 700, cursor: "pointer", color: "#333" } }, "+"),
-            React.createElement("button", { onClick: () => setZoom(z => Math.max(3, z - 1)), style: { width: 38, height: 38, background: "#fff", border: "none", borderRadius: 11, boxShadow: "0 2px 10px rgba(0,0,0,.18)", fontSize: 22, fontWeight: 700, cursor: "pointer", color: "#333" } }, "\u2212"),
-            React.createElement("button", { onClick: () => { setCenter({ lat: 38.56, lng: 68.77 }); setZoom(13); }, title: "\u0422\u0430\u0434\u0436\u0438\u043A\u0438\u0441\u0442\u0430\u043D", style: { width: 38, height: 38, background: "#fff", border: "none", borderRadius: 11, boxShadow: "0 2px 10px rgba(0,0,0,.18)", fontSize: 15, cursor: "pointer" } }, "\uD83C\uDDF9\uD83C\uDDEF"))));
+        if (route && route.length >= 2) {
+            const pts = route.map(p => [p.lat, p.lng]);
+            const g = L.layerGroup();
+            L.polyline(pts, { color: "#fff", weight: 11, opacity: 1, lineCap: "round", lineJoin: "round" }).addTo(g);
+            L.polyline(pts, { color: "#00B341", weight: 6.5, opacity: 1, lineCap: "round", lineJoin: "round" }).addTo(g);
+            // имитация пробок: детерминированные жёлтые/красные отрезки
+            if (route.length > 20) {
+                const segN = Math.min(14, Math.floor(route.length / 8));
+                const step = Math.floor(route.length / segN);
+                for (let i = 0; i < segN; i++) {
+                    const h = (i * 2654435761 + route.length * 97) >>> 0;
+                    const r = (h % 100);
+                    if (r < 18) {
+                        const a = i * step, b = Math.min(route.length - 1, a + Math.max(3, Math.floor(step * .6)));
+                        L.polyline(pts.slice(a, b + 1), { color: r < 6 ? "#E53935" : "#F5A623", weight: 6.5, opacity: 1, lineCap: "round" }).addTo(g);
+                    }
+                }
+            }
+            g.addTo(map);
+            lyRef.current.route = g;
+        }
+    }, [ready, routeKey, carProg == null ? "x" : "ride"]);
+    // ── маркеры A/B + ETA ──
+    const markKey = (markers || []).map(m => m.lat.toFixed(4) + "," + m.lng.toFixed(4)).join("|") + "|" + (etaMin || "");
+    useEffect(() => {
+        const L = window.L, map = mapRef.current;
+        if (!ready || !L || !map)
+            return;
+        if (lyRef.current.marks) {
+            map.removeLayer(lyRef.current.marks);
+            lyRef.current.marks = null;
+        }
+        const ms = markers || [];
+        if (!ms.length)
+            return;
+        const g = L.layerGroup();
+        ms.forEach((m, i) => {
+            const last = i === ms.length - 1;
+            if (i === 0 && ms.length > 1) {
+                L.marker([m.lat, m.lng], { icon: L.divIcon({ className: "", html: '<div class="zm-a"></div>', iconSize: [20, 20], iconAnchor: [10, 10] }), interactive: false }).addTo(g);
+            }
+            else if (last) {
+                const pin = '<svg class="zm-pin" width="34" height="46" viewBox="0 0 34 46"><path d="M17 45C17 45 32 26.5 32 16.5C32 8 25.3 1 17 1C8.7 1 2 8 2 16.5C2 26.5 17 45 17 45Z" fill="#00B341" stroke="#fff" stroke-width="2.5"/><circle cx="17" cy="16.5" r="5.5" fill="#fff"/></svg>';
+                L.marker([m.lat, m.lng], { icon: L.divIcon({ className: "", html: pin, iconSize: [34, 46], iconAnchor: [17, 44] }), interactive: false }).addTo(g);
+                if (etaMin) {
+                    L.marker([m.lat, m.lng], { icon: L.divIcon({ className: "", html: `<div class="zm-eta">${etaMin}<small>мин</small></div>`, iconSize: [0, 0], iconAnchor: [-14, 62] }), interactive: false }).addTo(g);
+                }
+            }
+            else {
+                L.marker([m.lat, m.lng], { icon: L.divIcon({ className: "", html: `<div class="zm-wp">${i}</div>`, iconSize: [20, 20], iconAnchor: [10, 10] }), interactive: false }).addTo(g);
+            }
+        });
+        g.addTo(map);
+        lyRef.current.marks = g;
+    }, [ready, markKey]);
+    // ── автоподгонка ──
+    useEffect(() => {
+        const L = window.L, map = mapRef.current;
+        if (!ready || !L || !map)
+            return;
+        const ms = markers || [];
+        if (!ms.length)
+            return;
+        if (ms.length === 1) {
+            map.setView([ms[0].lat, ms[0].lng], 15, { animate: true });
+            return;
+        }
+        const src = (route && route.length >= 2) ? route : ms;
+        const b = L.latLngBounds(src.map(p => [p.lat, p.lng]));
+        map.fitBounds(b, { paddingTopLeft: [42, 66], paddingBottomRight: [42, 86], animate: true, maxZoom: 16 });
+    }, [ready, fitKey, routeKey]);
+    // ── машина (плавное движение + поворот по маршруту) ──
+    useEffect(() => {
+        const L = window.L, map = mapRef.current;
+        if (!ready || !L || !map)
+            return;
+        const has = carProg != null && route && route.length >= 2;
+        if (!has) {
+            if (lyRef.current.car) {
+                map.removeLayer(lyRef.current.car);
+                lyRef.current.car = null;
+            }
+            return;
+        }
+        const p = interpLL(route, carProg);
+        const p2 = interpLL(route, Math.min(1, carProg + 0.012));
+        const ang = bearingLL(p, p2);
+        const html = `<div class="zm-car"><svg width="20" height="20" viewBox="0 0 24 24" style="transform:rotate(${Math.round(ang)}deg)"><path d="M12 2L19 21L12 17L5 21L12 2Z" fill="#00B341" stroke="#008C32" stroke-width="1" stroke-linejoin="round"/></svg></div>`;
+        if (!lyRef.current.car) {
+            lyRef.current.car = L.marker([p.lat, p.lng], { icon: L.divIcon({ className: "", html, iconSize: [34, 34], iconAnchor: [17, 17] }), interactive: false, zIndexOffset: 900 }).addTo(map);
+        }
+        else {
+            lyRef.current.car.setLatLng([p.lat, p.lng]);
+            const el = lyRef.current.car.getElement();
+            if (el) {
+                const svg = el.querySelector("svg");
+                if (svg)
+                    svg.style.transform = `rotate(${Math.round(ang)}deg)`;
+            }
+        }
+        if (follow)
+            map.panTo([p.lat, p.lng], { animate: true, duration: 0.8 });
+    }, [ready, carProg, follow]);
+    // ── моя геопозиция ──
+    useEffect(() => {
+        const L = window.L, map = mapRef.current;
+        if (!ready || !L || !map)
+            return;
+        if (userLoc && userLoc.lat) {
+            const html = '<div class="zm-user"><div class="ping"></div><div class="dot"></div></div>';
+            if (!lyRef.current.user) {
+                lyRef.current.user = L.marker([userLoc.lat, userLoc.lng], { icon: L.divIcon({ className: "", html, iconSize: [18, 18], iconAnchor: [9, 9] }), interactive: false, zIndexOffset: 800 }).addTo(map);
+                if (!follow)
+                    map.flyTo([userLoc.lat, userLoc.lng], Math.max(map.getZoom(), 15), { duration: 0.9 });
+            }
+            else
+                lyRef.current.user.setLatLng([userLoc.lat, userLoc.lng]);
+        }
+        else if (lyRef.current.user) {
+            map.removeLayer(lyRef.current.user);
+            lyRef.current.user = null;
+        }
+    }, [ready, userLoc && userLoc.lat, userLoc && userLoc.lng]);
+    return (React.createElement("div", { style: { position: "absolute", inset: 0, overflow: "hidden", background: "#EDEBE6" } },
+        React.createElement("div", { ref: boxRef, style: { position: "absolute", inset: 0, cursor: picking ? "crosshair" : "grab" } }),
+        !ready && React.createElement("div", { style: { position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", color: "#9CA3AF", fontSize: 12, fontWeight: 600 } }, "Загрузка карты…"),
+        React.createElement("div", { style: { position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", display: "flex", flexDirection: "column", gap: 6, zIndex: 500 } },
+            React.createElement("button", { onClick: () => mapRef.current && mapRef.current.zoomIn(), style: { width: 38, height: 38, background: "#fff", border: "none", borderRadius: 11, boxShadow: "0 2px 10px rgba(0,0,0,.18)", fontSize: 20, fontWeight: 700, cursor: "pointer", color: "#333" } }, "+"),
+            React.createElement("button", { onClick: () => mapRef.current && mapRef.current.zoomOut(), style: { width: 38, height: 38, background: "#fff", border: "none", borderRadius: 11, boxShadow: "0 2px 10px rgba(0,0,0,.18)", fontSize: 22, fontWeight: 700, cursor: "pointer", color: "#333" } }, "−"),
+            React.createElement("button", { onClick: () => mapRef.current && mapRef.current.setView(window.__zoodCenter || [38.5598, 68.787], 13, { animate: true }), title: "Таджикистан", style: { width: 38, height: 38, background: "#fff", border: "none", borderRadius: 11, boxShadow: "0 2px 10px rgba(0,0,0,.18)", fontSize: 15, cursor: "pointer" } }, "🇹🇯"))));
 }
 // ═══ CUSTOMER APP v3 — Yandex Go стиль · Рейтинг · Живая карта · Нижнее меню ═══
 const SAVED_ADDRESSES = [
@@ -1317,6 +1540,8 @@ const SAVED_ADDRESSES = [
 const PAY_METHODS = [
     { id: "alif", label: "АЛИФ Пэй", icon: "💚", balance: "245.50 с.", accent: "#00A850", bg: "#E8F8EE" },
     { id: "eskhata", label: "Эсхата", icon: "🔵", balance: null, accent: "#0057A8", bg: "#E8F2FF" },
+    { id: "dc", label: "Душанбе Сити", icon: "🟡", balance: "58.20 с.", accent: "#C99700", bg: "#FFF8DC" },
+    { id: "milli", label: "Корти Милли •••2452", icon: "🏦", balance: null, accent: "#1B7A3D", bg: "#E8F5E9" },
     { id: "card", label: "VISA **** 4521", icon: "💳", balance: null, accent: "#1A1A2E", bg: "#F1F5F9" },
     { id: "cash", label: "Наличными курьеру", icon: "💵", balance: null, accent: "#374151", bg: "#F9FAFB" },
 ];
@@ -1416,6 +1641,14 @@ function CustomerApp({ onOrder, orders }) {
     const [auth, setAuth] = useStore("zudgo_profile_v1", null);
     const cart = useCart();
     const [scr, setScr] = useState("home");
+    const [lang, setLang] = useStore("zood_lang_v1", "ru");
+    const [city, setCity] = useStore("zood_city_v1", "Душанбе");
+    const [showCitySheet, setShowCitySheet] = useState(false);
+    const T = (ru, tj) => (lang === "tj" && tj) ? tj : ru;
+    useEffect(() => {
+        const c = TJ_CITY_LIST.find(x => x.n === city);
+        if (c) window.__zoodCenter = [c.lat, c.lng];
+    }, [city]);
     const [showGuestPrompt, setShowGuestPrompt] = useState(false);
     const isGuest = auth?.guest === true;
     // ── Toast уведомления ─────────────────────────────────────────
@@ -1560,7 +1793,7 @@ function CustomerApp({ onOrder, orders }) {
         const isHome = ["home", "deliv_catalog", "deliv_menu", "partner"].includes(scr) || scr === "home";
         if (!["home", "orders_tab", "promo_tab", "profile_tab"].includes(scr) && !["home"].includes(scr))
             return null;
-        return (React.createElement("div", { style: { background: WH, borderTop: `1px solid ${BD}`, display: "grid", gridTemplateColumns: "repeat(4,1fr)", padding: "7px 0 14px", flexShrink: 0 } }, [{ id: "home", ic: "home", l: "Главная" }, { id: "orders_tab", ic: "box", l: "Заказы", badge: ORDER_HISTORY.filter(o => o.ok).length }, { id: "promo_tab", ic: "gift", l: "Акции", badge: promos.filter(p => !p.used).length }, { id: "profile_tab", ic: "user", l: "Профиль" }].map(n => (React.createElement("button", { key: n.id, onClick: () => { setMainTab(n.id); setScr(n.id === "home" ? "home" : n.id); }, style: { background: "none", border: "none", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 3, position: "relative" } },
+        return (React.createElement("div", { style: { background: WH, borderTop: `1px solid ${BD}`, display: "grid", gridTemplateColumns: "repeat(4,1fr)", padding: "7px 0 14px", flexShrink: 0 } }, [{ id: "home", ic: "home", l: T("Главная", "Асосӣ") }, { id: "orders_tab", ic: "box", l: T("Заказы", "Фармоишҳо"), badge: ORDER_HISTORY.filter(o => o.ok).length }, { id: "promo_tab", ic: "gift", l: T("Акции", "Аксияҳо"), badge: promos.filter(p => !p.used).length }, { id: "profile_tab", ic: "user", l: T("Профиль", "Профил") }].map(n => (React.createElement("button", { key: n.id, onClick: () => { setMainTab(n.id); setScr(n.id === "home" ? "home" : n.id); }, style: { background: "none", border: "none", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 3, position: "relative" } },
             n.badge > 0 && React.createElement("div", { style: { position: "absolute", top: -3, right: "20%", width: 14, height: 14, background: R, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 8, color: WH, fontWeight: 800 } }, n.badge),
             React.createElement("span", { style: { display: "flex", opacity: scr === n.id || mainTab === n.id ? 1 : 0.4 } },
                 React.createElement(Icon, { name: n.ic, size: 22, color: scr === n.id || mainTab === n.id ? R : GY })),
@@ -1575,13 +1808,15 @@ function CustomerApp({ onOrder, orders }) {
             React.createElement("div", { style: { position: "absolute", top: 4, left: 14, right: 14, zIndex: 10, display: "flex", justifyContent: "space-between", alignItems: "center" } },
                 React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8 } },
                     React.createElement(ZoodLogo, { size: 34, rounded: 10 }),
-                    React.createElement("div", { style: { background: "rgba(255,255,255,.92)", backdropFilter: "blur(12px)", borderRadius: 22, padding: "6px 12px", fontSize: 11, fontWeight: 600, color: DK, boxShadow: "0 2px 10px rgba(0,0,0,.14)" } },
+                    React.createElement("button", { onClick: () => setShowCitySheet(true), style: { background: "rgba(255,255,255,.92)", backdropFilter: "blur(12px)", border: "none", borderRadius: 22, padding: "6px 12px", fontSize: 11, fontWeight: 600, color: DK, boxShadow: "0 2px 10px rgba(0,0,0,.14)", cursor: "pointer", fontFamily: "inherit", display: "flex", alignItems: "center" } },
                         React.createElement(Icon, { name: "pin", size: 14, color: "currentColor", style: { marginRight: 5 } }),
-                        "\u0414\u0443\u0448\u0430\u043D\u0431\u0435")),
-                React.createElement("div", { style: { background: "rgba(255,255,255,.92)", backdropFilter: "blur(12px)", borderRadius: 22, padding: "6px 12px", display: "flex", gap: 5, alignItems: "center", boxShadow: "0 2px 10px rgba(0,0,0,.14)" } },
-                    React.createElement("span", { style: { fontSize: 13 } },
-                        React.createElement(Icon, { name: "card", size: 15, color: "currentColor" })),
-                    React.createElement("span", { style: { fontSize: 11, fontWeight: 700, color: DK } }, "245 \u0441."))),
+                        city, " \u25BE")),
+                React.createElement("div", { style: { display: "flex", gap: 7, alignItems: "center" } },
+                    React.createElement("button", { onClick: () => setLang(lang === "tj" ? "ru" : "tj"), style: { background: "rgba(255,255,255,.92)", backdropFilter: "blur(12px)", border: "none", borderRadius: 22, padding: "6px 11px", fontSize: 10.5, fontWeight: 800, color: NV, boxShadow: "0 2px 10px rgba(0,0,0,.14)", cursor: "pointer", fontFamily: "inherit" } }, lang === "tj" ? "\u0420\u0423" : "\u0422\u04B6"),
+                    React.createElement("div", { style: { background: "rgba(255,255,255,.92)", backdropFilter: "blur(12px)", borderRadius: 22, padding: "6px 12px", display: "flex", gap: 5, alignItems: "center", boxShadow: "0 2px 10px rgba(0,0,0,.14)" } },
+                        React.createElement("span", { style: { fontSize: 13 } },
+                            React.createElement(Icon, { name: "card", size: 15, color: "currentColor" })),
+                        React.createElement("span", { style: { fontSize: 11, fontWeight: 700, color: DK } }, "245 \u0441.")))),
             isGuest && React.createElement("div", { onClick: () => setAuth(null), style: { position: "absolute", top: 10, left: "50%", transform: "translateX(-50%)", zIndex: 20, background: "rgba(13,27,42,.85)", borderRadius: 22, padding: "7px 16px", cursor: "pointer", display: "flex", gap: 7, alignItems: "center", whiteSpace: "nowrap" } },
                 React.createElement("span", { style: { fontSize: 14 } },
                     React.createElement(Icon, { name: "user", size: 15, color: "currentColor" })),
@@ -1597,9 +1832,9 @@ function CustomerApp({ onOrder, orders }) {
             React.createElement("div", { onClick: () => requireAuth() && setScr("taxi"), style: { margin: "0 14px 12px", background: "#F3F4F6", borderRadius: 22, padding: "13px 16px", display: "flex", alignItems: "center", gap: 10, cursor: "pointer", border: `1.5px solid ${BD}`, boxShadow: "0 2px 8px rgba(0,0,0,.04)" } },
                 React.createElement("span", { style: { fontSize: 17, color: GY } },
                     React.createElement(Icon, { name: "search", size: 15, color: "currentColor" })),
-                React.createElement("span", { style: { fontSize: 14, color: GY, flex: 1, fontWeight: 500 } }, "\u041A\u0443\u0434\u0430 \u0435\u0434\u0435\u043C?"),
+                React.createElement("span", { style: { fontSize: 14, color: GY, flex: 1, fontWeight: 500 } }, T("\u041A\u0443\u0434\u0430 \u0435\u0434\u0435\u043C?", "\u0411\u0430 \u043A\u0443\u04B7\u043E \u043C\u0435\u0440\u0430\u0432\u0435\u043C?")),
                 React.createElement("div", { style: { background: NV, borderRadius: 12, padding: "4px 10px", fontSize: 11, color: WH, fontWeight: 700 } }, "\u0422\u0430\u043A\u0441\u0438")),
-            React.createElement("div", { style: { display: "flex", gap: 9, padding: "0 14px 12px" } }, [{ ic: "taxi", l: "Такси", s: "taxi", c: NV }, { ic: "box", l: "Доставка", s: "deliv_menu", c: R }, { ic: "shop", l: "Магазин", s: "deliv_catalog", c: GR }, { ic: "wrench", l: "Помощь", s: "help", c: GD }].map(sv => (React.createElement("button", { key: sv.l, onClick: () => (sv.s === "partner_landing" || requireAuth()) && setScr(sv.s), style: { flex: 1, padding: "10px 4px 8px", borderRadius: 16, border: `1.5px solid ${BD}`, background: WH, cursor: "pointer", fontFamily: "inherit", boxShadow: "0 2px 8px rgba(0,0,0,.06)", transition: "all .15s" } },
+            React.createElement("div", { style: { display: "flex", gap: 9, padding: "0 14px 12px" } }, [{ ic: "taxi", l: T("Такси", "Таксӣ"), s: "taxi", c: NV }, { ic: "box", l: T("Доставка", "Расонидан"), s: "deliv_menu", c: R }, { ic: "shop", l: T("Магазин", "Мағоза"), s: "deliv_catalog", c: GR }, { ic: "wrench", l: T("Помощь", "Кӯмак"), s: "help", c: GD }].map(sv => (React.createElement("button", { key: sv.l, onClick: () => (sv.s === "partner_landing" || requireAuth()) && setScr(sv.s), style: { flex: 1, padding: "10px 4px 8px", borderRadius: 16, border: `1.5px solid ${BD}`, background: WH, cursor: "pointer", fontFamily: "inherit", boxShadow: "0 2px 8px rgba(0,0,0,.06)", transition: "all .15s" } },
                 React.createElement("div", { style: { marginBottom: 5, display: "flex", justifyContent: "center" } },
                     React.createElement(Icon, { name: sv.ic, size: 26, color: sv.c })),
                 React.createElement("div", { style: { fontSize: 10, fontWeight: 700, color: DK } }, sv.l))))),
@@ -1610,19 +1845,20 @@ function CustomerApp({ onOrder, orders }) {
                         React.createElement("div", { style: { color: WH, fontWeight: 800, fontSize: 13, lineHeight: 1.2 } }, BANNERS[bannerIdx].t),
                         React.createElement("div", { style: { color: "rgba(255,255,255,.65)", fontSize: 10, marginTop: 2 } }, BANNERS[bannerIdx].s)),
                     React.createElement("div", { style: { background: "rgba(255,255,255,.2)", borderRadius: 10, padding: "5px 10px", fontSize: 10, color: WH, fontWeight: 700, whiteSpace: "nowrap" } }, BANNERS[bannerIdx].btn)),
+                React.createElement("div", { style: { position: "absolute", top: 0, bottom: 0, left: 0, width: 70, background: "linear-gradient(105deg,transparent,rgba(255,255,255,.32),transparent)", animation: "shineSweep 3.4s ease-in-out infinite", pointerEvents: "none" } }),
                 React.createElement("div", { style: { position: "absolute", bottom: 7, right: 12, display: "flex", gap: 4 } }, BANNERS.map((_, i) => React.createElement("div", { key: i, style: { width: i === bannerIdx ? 16 : 5, height: 5, borderRadius: 3, background: "rgba(255,255,255,.7)", transition: "width .3s" } })))),
             React.createElement("div", { onClick: () => requireAuth() && setScr("intercity"), style: { margin: "0 14px 10px", borderRadius: 18, overflow: "hidden", cursor: "pointer", background: `linear-gradient(135deg,${NV},#1B3A5C)`, padding: "13px 16px", display: "flex", alignItems: "center", gap: 12, boxShadow: `0 6px 20px ${NV}33` } },
                 React.createElement("div", { style: { width: 46, height: 46, background: "rgba(255,255,255,.15)", borderRadius: 13, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24, flexShrink: 0 } },
                     React.createElement(Icon, { name: "bus", size: 15, color: "currentColor" })),
                 React.createElement("div", { style: { flex: 1 } },
-                    React.createElement("div", { style: { color: WH, fontWeight: 800, fontSize: 14 } }, "\u041C\u0435\u0436\u0433\u043E\u0440\u043E\u0434"),
-                    React.createElement("div", { style: { color: "rgba(255,255,255,.6)", fontSize: 11, marginTop: 1 } }, "\u041F\u043E\u043F\u0443\u0442\u0447\u0438\u043A \u0438\u043B\u0438 \u0432\u0435\u0441\u044C \u0441\u0430\u043B\u043E\u043D \u00B7 \u0414\u0448\u2192\u0425\u0434\u0436 \u043E\u0442 120 \u0441.")),
+                    React.createElement("div", { style: { color: WH, fontWeight: 800, fontSize: 14 } }, T("\u041C\u0435\u0436\u0433\u043E\u0440\u043E\u0434", "\u0411\u0430\u0439\u043D\u0438\u0448\u0430\u04B3\u0440\u04E3")),
+                    React.createElement("div", { style: { color: "rgba(255,255,255,.6)", fontSize: 11, marginTop: 1 } }, T("\u041F\u043E\u043F\u0443\u0442\u0447\u0438\u043A \u0438\u043B\u0438 \u0432\u0435\u0441\u044C \u0441\u0430\u043B\u043E\u043D \u00B7 \u0414\u0448\u2192\u0425\u0434\u0436 \u043E\u0442 120 \u0441.", "\u04B2\u0430\u043C\u0441\u0430\u0444\u0430\u0440 \u0451 \u0442\u0430\u043C\u043E\u043C\u0438 \u0441\u0430\u043B\u043E\u043D \u00B7 \u0430\u0437 120 \u0441."))),
                 React.createElement("div", { style: { background: "rgba(255,255,255,.15)", borderRadius: 10, padding: "5px 10px", fontSize: 11, color: WH, fontWeight: 700 } }, "\u0412\u044B\u0431\u0440\u0430\u0442\u044C \u2192")),
             React.createElement("div", { style: { borderTop: `1px solid ${BD}`, padding: "10px 14px 6px" } },
                 React.createElement("div", { style: { fontWeight: 700, fontSize: 10, color: MG, letterSpacing: 1, marginBottom: 8 } },
                     React.createElement(Icon, { name: "bolt", size: 14, color: "currentColor", style: { marginRight: 5 } }),
-                    "\u0411\u042B\u0421\u0422\u0420\u042B\u0415 \u041C\u0415\u0421\u0422\u0410"),
-                React.createElement("div", { style: { display: "flex", gap: 8, overflowX: "auto", scrollbarWidth: "none", marginBottom: 4 } }, [{ ic: "home", l: "Дом", a: "ул. Айни, 45" }, { ic: "work", l: "Работа", a: "пр. Рудаки, 12" }, { ic: "cart", l: "Саймон", a: "ул. Исмоилова" }, { ic: "plane", l: "Аэропорт", a: "Международный" }, { ic: "pill", l: "Больница", a: "Ш. Шотемур, 69" }].map(p => (React.createElement("button", { key: p.l, onClick: () => requireAuth() && setScr("taxi"), style: { flexShrink: 0, width: 72, padding: "10px 6px 8px", background: BG, border: `1px solid ${BD}`, borderRadius: 14, cursor: "pointer", textAlign: "center", fontFamily: "inherit", boxShadow: "0 2px 8px rgba(0,0,0,.05)" } },
+                    T("\u0411\u042B\u0421\u0422\u0420\u042B\u0415 \u041C\u0415\u0421\u0422\u0410", "\u04B6\u041E\u0419\u04B2\u041E\u0418 \u0417\u0423\u0414")),
+                React.createElement("div", { style: { display: "flex", gap: 8, overflowX: "auto", scrollbarWidth: "none", marginBottom: 4 } }, [{ ic: "home", l: T("Дом", "Хона"), a: "ул. Айни, 45" }, { ic: "work", l: T("Работа", "Кор"), a: "пр. Рудаки, 12" }, { ic: "cart", l: "Саймон", a: "ул. Исмоилова" }, { ic: "plane", l: T("Аэропорт", "Фурудгоҳ"), a: "Международный" }, { ic: "pill", l: T("Больница", "Беморхона"), a: "Ш. Шотемур, 69" }].map(p => (React.createElement("button", { key: p.l, onClick: () => requireAuth() && setScr("taxi"), style: { flexShrink: 0, width: 72, padding: "10px 6px 8px", background: BG, border: `1px solid ${BD}`, borderRadius: 14, cursor: "pointer", textAlign: "center", fontFamily: "inherit", boxShadow: "0 2px 8px rgba(0,0,0,.05)" } },
                     React.createElement("div", { style: { marginBottom: 4, display: "flex", justifyContent: "center" } },
                         React.createElement(Icon, { name: p.ic, size: 20, color: NV })),
                     React.createElement("div", { style: { fontSize: 10, fontWeight: 700, color: DK } }, p.l),
@@ -1935,6 +2171,7 @@ function CustomerApp({ onOrder, orders }) {
                 React.createElement("div", { style: { position: "absolute", top: 8, right: 8, background: "rgba(255,255,255,.93)", borderRadius: 10, padding: "3px 10px", fontSize: 10, fontWeight: 700, color: DK, display: "flex", alignItems: "center", gap: 4 } },
                     React.createElement(Icon, { name: "bike", size: 12, color: GR }),
                     "\u041A\u0443\u0440\u044C\u0435\u0440 \u043E\u043D\u043B\u0430\u0439\u043D")),
+                trackStage === 2 && React.createElement(Confetti, null),
             React.createElement("div", { style: sc },
                 React.createElement("div", { style: { padding: "10px 14px" } },
                     React.createElement("div", { style: { ...card, padding: "13px 15px", marginBottom: 10 } },
@@ -2313,6 +2550,12 @@ function CustomerApp({ onOrder, orders }) {
     }
     ;
     return (React.createElement("div", { style: { display: "flex", flexDirection: "column", height: "100%", position: "relative" } },
+        showCitySheet && React.createElement("div", { style: { position: "absolute", inset: 0, background: "rgba(0,0,0,.45)", zIndex: 320, display: "flex", alignItems: "flex-end" }, onClick: () => setShowCitySheet(false) },
+            React.createElement("div", { onClick: e => e.stopPropagation(), style: { background: WH, borderRadius: "22px 22px 0 0", width: "100%", padding: "16px 16px 28px", maxHeight: "70%", overflowY: "auto", animation: "sheetUp .28s ease" } },
+                React.createElement("div", { style: { fontWeight: 800, fontSize: 16, color: DK, marginBottom: 12 } }, T("\u0412\u0430\u0448 \u0433\u043E\u0440\u043E\u0434", "\u0428\u0430\u04B3\u0440\u0438 \u0448\u0443\u043C\u043E")),
+                TJ_CITY_LIST.map(c => React.createElement("button", { key: c.n, onClick: () => { setCity(c.n); setShowCitySheet(false); toast(`\uD83D\uDCCD ${c.n}`, "ok"); }, style: { width: "100%", padding: "13px 14px", marginBottom: 7, background: city === c.n ? RL : BG, border: `1.5px solid ${city === c.n ? R : BD}`, borderRadius: 13, fontSize: 14, fontWeight: 700, color: DK, cursor: "pointer", fontFamily: "inherit", textAlign: "left", display: "flex", justifyContent: "space-between", alignItems: "center" } },
+                    React.createElement("span", null, c.n),
+                    city === c.n && React.createElement("span", { style: { color: R, fontWeight: 900 } }, "\u2713"))))),
         showGuestPrompt && React.createElement("div", { style: { position: "absolute", inset: 0, background: "rgba(0,0,0,.55)", zIndex: 200, display: "flex", alignItems: "flex-end" } },
             React.createElement("div", { style: { background: WH, borderRadius: "24px 24px 0 0", width: "100%", padding: "8px 18px 32px" } },
                 React.createElement("div", { style: { width: 38, height: 4, background: BD, borderRadius: 2, margin: "12px auto 18px" } }),
@@ -2623,8 +2866,8 @@ function DriverApp({ orders, onUpdate }) {
         function init() {
             const L = window.L;
             const map = L.map(mount, { zoomControl: false, attributionControl: false, dragging: true, scrollWheelZoom: false, tap: false }).setView([DPOS.lat, DPOS.lng], 15);
-            L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-                attribution: '© <a href="https://openstreetmap.org">OpenStreetMap</a>', maxZoom: 19, subdomains: "abc"
+            L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", {
+                attribution: '© OSM · CARTO', maxZoom: 19, subdomains: "abcd"
             }).addTo(map);
             L.control.zoom({ position: "bottomright" }).addTo(map);
             // Car icon
@@ -3542,6 +3785,12 @@ _root.render(React.createElement(ZudGoEcosystem, null));
 
 document.getElementById("loader").classList.add("hide");
 setTimeout(()=>{const l=document.getElementById("loader");l&&l.remove();},600);
+
+if ("serviceWorker" in navigator) {
+    window.addEventListener("load", () => {
+        navigator.serviceWorker.register("sw.js").catch(() => {});
+    });
+}
 </script>
 </body>
 </html>
