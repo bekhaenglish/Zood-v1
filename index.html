@@ -520,6 +520,14 @@ function clockAt(minutesFromNow) {
     const d = new Date(Date.now() + Math.max(0, minutesFromNow) * 60000);
     return d.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
 }
+function timeAgo(ts) {
+    const min = Math.max(0, Math.round((Date.now() - ts) / 60000));
+    if (min < 1) return "только что";
+    if (min < 60) return `${min} мин`;
+    const h = Math.round(min / 60);
+    if (h < 24) return `${h} ч`;
+    return `${Math.round(h / 24)} дн`;
+}
 function useRoadRoute(stops, setRoadRoute) {
     useEffect(() => {
         const pts = stops.filter(s => s.lat);
@@ -694,6 +702,12 @@ function TaxiScreen({ onBack, onHelp }) {
     const [tip, setTip] = useState(0);
     const [showSOS, setShowSOS] = useState(false);
     const [okToast, setOkToast] = useState(null);
+    const [recent, setRecent] = useStore("zood_recent_addr_v1", []);
+    function addRecent(place) {
+        if (!place || !place.name) return;
+        setRecent(prev => [{ name: place.name, addr: place.addr || place.name, lat: place.lat, lng: place.lng, t: Date.now() },
+            ...(prev || []).filter(p => p.name !== place.name)].slice(0, 6));
+    }
     const geoTimer = useRef(null);
     const statusRef = useRef("idle");
     const distKm = roadRoute && roadRoute.dist ? Math.max(1, Math.round(roadRoute.dist / 100) / 10) : Math.round(8 + stops.filter(s => s.addr).length * 4);
@@ -804,6 +818,11 @@ function TaxiScreen({ onBack, onHelp }) {
     function pickSuggest(place) {
         setSuggest({ list: [], idx: null, field: null });
         setStops(p => p.map((s, i) => i === suggest.field ? { ...s, addr: place.name, lat: place.lat, lng: place.lng } : s));
+        addRecent(place);
+    }
+    function pickRecent(place) {
+        setStops(p => p.map((s, i) => i === p.length - 1 ? { ...s, addr: place.name, lat: place.lat, lng: place.lng } : s));
+        addRecent(place);
     }
     function addStop() {
         const newS = { id: "s" + Date.now(), addr: "", ph: "📍 Остановка", lat: null, lng: null };
@@ -871,6 +890,14 @@ function TaxiScreen({ onBack, onHelp }) {
                         React.createElement("div", null,
                             React.createElement("div", { style: { fontWeight: 600 } }, p.name),
                             React.createElement("div", { style: { fontSize: 10, color: GY } }, p.addr))))))),
+                !suggest.list.length && !stops[stops.length - 1].addr && recent && recent.length > 0 && React.createElement("div", { style: { marginBottom: 10 } },
+                    React.createElement("div", { style: { fontWeight: 700, fontSize: 10, color: MG, letterSpacing: 1, marginBottom: 6, padding: "0 2px" } }, "\u041D\u0415\u0414\u0410\u0412\u041D\u0418\u0415 \u0410\u0414\u0420\u0415\u0421\u0410"),
+                    React.createElement("div", { style: { background: BG, borderRadius: 16, overflow: "hidden" } },
+                        recent.map((p, i) => (React.createElement("div", { key: p.name, onClick: () => pickRecent(p), style: { display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", borderBottom: i < recent.length - 1 ? `1px solid ${BD}` : "none", cursor: "pointer" } },
+                            React.createElement("span", { style: { fontSize: 14, flexShrink: 0 } }, "\uD83D\uDD16"),
+                            React.createElement("div", { style: { flex: 1, minWidth: 0 } },
+                                React.createElement("div", { style: { fontSize: 12.5, fontWeight: 600, color: DK, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" } }, p.name)),
+                            React.createElement("span", { style: { fontSize: 10, color: MG, flexShrink: 0 } }, timeAgo(p.t))))))),
                 React.createElement("button", { onClick: addStop, style: { width: "100%", padding: "8px 14px", background: BG, border: `1px dashed ${BD}`, borderRadius: 11, fontSize: 12, color: MG, cursor: "pointer", marginBottom: 10, fontFamily: "inherit" } }, "+ \u0414\u043E\u0431\u0430\u0432\u0438\u0442\u044C \u043E\u0441\u0442\u0430\u043D\u043E\u0432\u043A\u0443"),
                 React.createElement("div", { style: { display: "flex", gap: 8, marginBottom: 10, overflowX: "auto", paddingBottom: 2 } }, CAR_OPTIONS.map(t => (React.createElement("button", { key: t.id, onClick: () => setTTariff(t), style: { flexShrink: 0, padding: "9px 12px", borderRadius: 14, border: `2px solid ${tTariff?.id === t.id ? t.col : BD}`, background: tTariff?.id === t.id ? t.col + "18" : BG, cursor: "pointer", textAlign: "center", fontFamily: "inherit", minWidth: 76, boxShadow: tTariff?.id === t.id ? `0 4px 14px ${t.col}33` : "none" } },
                     React.createElement("div", { style: { fontSize: 18, marginBottom: 2 } }, t.emoji),
