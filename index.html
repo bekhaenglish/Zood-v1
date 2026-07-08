@@ -627,6 +627,21 @@ const TJ_CITY_LIST = [
     { n: "Турсунзаде", lat: 38.5108, lng: 68.2306 },
     { n: "Хорог", lat: 37.4897, lng: 71.5533 },
 ];
+// Популярные адреса Душанбе — локальные подсказки, пока грузится живой поиск (Nominatim)
+const DUSHANBE_PLACES = [
+    { name: "Аэропорт Душанбе", addr: "Аэропорт Душанбе, ул. Айни", lat: 38.5433, lng: 68.8250, pop: true },
+    { name: "Ж/д вокзал Душанбе-1", addr: "пр. Исмоили Сомони, Душанбе", lat: 38.5764, lng: 68.7908, pop: true },
+    { name: "Парк Рудаки", addr: "пр. Рудаки, Душанбе", lat: 38.5765, lng: 68.7870, pop: true },
+    { name: "ТЦ Кайраккум Плаза", addr: "пр. Рудаки, 37, Душанбе", lat: 38.5730, lng: 68.7796, pop: true },
+    { name: "Дворец Нации", addr: "ул. Пешаворская, Душанбе", lat: 38.5865, lng: 68.7754, pop: false },
+    { name: "Центральный рынок Шохмансур (Зелёный базар)", addr: "ул. Пушкина, Душанбе", lat: 38.5648, lng: 68.7803, pop: true },
+    { name: "Душанбе Плаза", addr: "ул. Бохтар, 37, Душанбе", lat: 38.5590, lng: 68.7756, pop: false },
+    { name: "Парк Ирам", addr: "пр. Рудаки, Душанбе", lat: 38.5520, lng: 68.7735, pop: false },
+    { name: "ТРЦ Ашан", addr: "ул. Айни, Душанбе", lat: 38.5940, lng: 68.7660, pop: false },
+    { name: "Таджикский национальный университет", addr: "пр. Рудаки, 17, Душанбе", lat: 38.5605, lng: 68.7910, pop: false },
+    { name: "Автовокзал Душанбе", addr: "ул. Лохути, Душанбе", lat: 38.5488, lng: 68.7550, pop: false },
+    { name: "Больница им. Дьякова", addr: "ул. Санои, Душанбе", lat: 38.5690, lng: 68.7690, pop: false },
+];
 const RIDE_PAY = [
     { id: "cash", icon: "money", label: "Наличными", sub: "" },
     { id: "dc", icon: "card", label: "Душанбе Сити", sub: "Городской кошелёк" },
@@ -658,7 +673,6 @@ function TaxiScreen({ onBack, onHelp }) {
     const [addingStop, setAddingStop] = useState(false);
     const [newStopAddr, setNewStopAddr] = useState("");
     const [suggest, setSuggest] = useState({ list: [], idx: null, field: null });
-    const [waitSec, setWaitSec] = useState(0);
     const [payMethod, setPayMethod] = useState("cash");
     const [showPayPick, setShowPayPick] = useState(false);
     const [callToast, setCallToast] = useState(false);
@@ -698,13 +712,18 @@ function TaxiScreen({ onBack, onHelp }) {
         else { try { navigator.clipboard.writeText(txt); } catch (e) { } flashOk("Ссылка на поездку скопирована"); }
     }
     useRoadRoute(stops, setRoadRoute);
+    const mountedRef = useRef(true);
+    useEffect(() => () => { mountedRef.current = false; }, []);
     function locate() {
         if (typeof navigator === "undefined" || !navigator.geolocation)
             return;
         navigator.geolocation.getCurrentPosition(pos => {
+            if (!mountedRef.current)
+                return;
             const p = { lat: pos.coords.latitude, lng: pos.coords.longitude };
             setUserLoc(p);
-            reverseGeocode(p.lat, p.lng).then(r => { setStops(prev => prev.map((s, i) => i === 0 && !s.addr ? { ...s, addr: (r ? r.name : "Моё местоположение"), lat: p.lat, lng: p.lng } : s)); });
+            reverseGeocode(p.lat, p.lng).then(r => { if (mountedRef.current)
+                setStops(prev => prev.map((s, i) => i === 0 && !s.addr ? { ...s, addr: (r ? r.name : "Моё местоположение"), lat: p.lat, lng: p.lng } : s)); });
         }, () => { }, { enableHighAccuracy: true, timeout: 8000, maximumAge: 60000 });
     }
     useEffect(() => { locate(); }, []);
@@ -723,13 +742,8 @@ function TaxiScreen({ onBack, onHelp }) {
             const t = setInterval(() => setMeter(p => Math.round((p + 0.028) * 10) / 10), 1000);
             return () => clearInterval(t);
         }
-        if (tStatus === "waiting") {
-            const t = setInterval(() => setWaitSec(p => p + 1), 1000);
-            return () => clearInterval(t);
-        }
         if (tStatus === "idle") {
             setMeter(0);
-            setWaitSec(0);
         }
     }, [tStatus]);
     function confirmRide() {
@@ -763,10 +777,13 @@ function TaxiScreen({ onBack, onHelp }) {
         const newS = { id: "s" + Date.now(), addr: "", ph: "📍 Остановка", lat: null, lng: null };
         setStops(p => [...p.slice(0, -1), newS, ...p.slice(-1)]);
     }
-    function addStopDuringRide() {
-        if (!newStopAddr.trim())
+    async function addStopDuringRide() {
+        const text = newStopAddr.trim();
+        if (!text)
             return;
-        setStops(p => [...p.slice(0, -1), { id: "s" + Date.now(), addr: newStopAddr, ph: "📍 Точка", lat: null, lng: null }, ...p.slice(-1)]);
+        const found = await geocodeSearch(text, "tj");
+        const match = found && found[0];
+        setStops(p => [...p.slice(0, -1), { id: "s" + Date.now(), addr: match ? match.name : text, ph: "📍 Точка", lat: match ? match.lat : null, lng: match ? match.lng : null }, ...p.slice(-1)]);
         setNewStopAddr("");
         setAddingStop(false);
     }
@@ -901,7 +918,7 @@ function TaxiScreen({ onBack, onHelp }) {
                             React.createElement("div", { style: { fontWeight: 800, fontSize: 14, color: DK } }, "\u0412\u043E\u0434\u0438\u0442\u0435\u043B\u044C \u043F\u0440\u0438\u0431\u044B\u043B!"),
                             React.createElement("div", { style: { fontSize: 11, color: GY } }, "\u0425\u0430\u0441\u0430\u043D \u0420. \u043E\u0436\u0438\u0434\u0430\u0435\u0442 \u0432\u0430\u0441 \u00B7 Nexia 3"))),
                     React.createElement("div", { style: { background: "rgba(255,255,255,.8)", borderRadius: 10, padding: "6px 12px", marginBottom: 8, fontSize: 10, color: "#78350F" } }, "\u23F1 3 \u043C\u0438\u043D \u0431\u0435\u0441\u043F\u043B\u0430\u0442\u043D\u043E, \u0434\u0430\u043B\u0435\u0435 1 \u0441./\u043C\u0438\u043D"),
-                    React.createElement("button", { onClick: () => { setTStatus("inprogress"); statusRef.current = "inprogress"; }, style: { width: "100%", padding: 11, background: `linear-gradient(135deg,#1B5E20,${GR})`, color: WH, border: "none", borderRadius: 12, fontSize: 12, fontWeight: 800, cursor: "pointer", fontFamily: "inherit", marginBottom: 6 } }, "\uD83D\uDE80 \u041D\u0430\u0447\u0430\u0442\u044C \u043F\u043E\u0435\u0437\u0434\u043A\u0443"),
+                    React.createElement("button", { onClick: startTrip, style: { width: "100%", padding: 11, background: `linear-gradient(135deg,#1B5E20,${GR})`, color: WH, border: "none", borderRadius: 12, fontSize: 12, fontWeight: 800, cursor: "pointer", fontFamily: "inherit", marginBottom: 6 } }, "\uD83D\uDE80 \u041D\u0430\u0447\u0430\u0442\u044C \u043F\u043E\u0435\u0437\u0434\u043A\u0443"),
                     React.createElement("button", { onClick: cancelRide, style: { width: "100%", padding: 10, background: "none", border: `1.5px solid ${R}33`, borderRadius: 11, fontSize: 11, color: R, cursor: "pointer", fontFamily: "inherit" } }, "\u041E\u0442\u043C\u0435\u043D\u0438\u0442\u044C (\u0448\u0442\u0440\u0430\u0444 3 \u0441.)"))),
             tStatus === "inprogress" && React.createElement("div", { style: { padding: "10px 16px 14px", animation: "fadeUp .3s ease-out" } },
                 React.createElement("div", { style: { background: `linear-gradient(135deg,${NV},#1B3A5C)`, borderRadius: 16, padding: "14px 16px", marginBottom: 10, boxShadow: `0 8px 28px ${NV}33` } },
@@ -955,6 +972,29 @@ function TaxiScreen({ onBack, onHelp }) {
                 React.createElement("div", { style: { display: "flex", gap: 8 } },
                     React.createElement("button", { onClick: doCancel, style: { flex: 1, padding: 13, background: R, color: WH, border: "none", borderRadius: 13, fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" } }, "\u0414\u0430, \u043E\u0442\u043C\u0435\u043D\u0438\u0442\u044C"),
                     React.createElement("button", { onClick: () => setShowCancel(false), style: { flex: 1, padding: 13, background: BG, border: `1px solid ${BD}`, borderRadius: 13, fontSize: 13, color: DK, cursor: "pointer", fontFamily: "inherit" } }, "\u041D\u0435\u0442"))))));
+}
+// \u2500\u2500 \u041C\u0435\u0436\u0433\u043E\u0440\u043E\u0434\u0441\u043A\u043E\u0435 \u0442\u0430\u043A\u0441\u0438 \u2014 \u0433\u043E\u0440\u043E\u0434\u0430, \u043C\u0430\u0440\u0448\u0440\u0443\u0442\u044B, \u043F\u043E\u043F\u0443\u0442\u0447\u0438\u043A\u0438 \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+const IC_CITIES = ["\u0414\u0443\u0448\u0430\u043D\u0431\u0435", "\u0425\u0443\u0434\u0436\u0430\u043D\u0434", "\u0411\u043E\u0445\u0442\u0430\u0440", "\u041A\u0443\u043B\u044F\u0431", "\u0418\u0441\u0442\u0430\u0440\u0430\u0432\u0448\u0430\u043D", "\u0422\u0443\u0440\u0441\u0443\u043D\u0437\u0430\u0434\u0435", "\u0425\u043E\u0440\u043E\u0433", "\u041F\u0430\u043D\u0434\u0436\u0430\u043A\u0435\u043D\u0442", "\u041A\u0430\u043D\u0438\u0431\u0430\u0434\u0430\u043C", "\u0412\u0430\u0445\u0434\u0430\u0442"];
+const IC_ROUTES = [
+    { id: "r1", from: "\u0414\u0443\u0448\u0430\u043D\u0431\u0435", to: "\u0425\u0443\u0434\u0436\u0430\u043D\u0434", km: 336, h: "~5\u0447", seat: 80, full: 300, hot: true },
+    { id: "r2", from: "\u0414\u0443\u0448\u0430\u043D\u0431\u0435", to: "\u041A\u0443\u043B\u044F\u0431", km: 205, h: "~3.5\u0447", seat: 60, full: 220, hot: true },
+    { id: "r3", from: "\u0414\u0443\u0448\u0430\u043D\u0431\u0435", to: "\u0411\u043E\u0445\u0442\u0430\u0440", km: 100, h: "~1.5\u0447", seat: 35, full: 130, hot: true },
+    { id: "r4", from: "\u0414\u0443\u0448\u0430\u043D\u0431\u0435", to: "\u0422\u0443\u0440\u0441\u0443\u043D\u0437\u0430\u0434\u0435", km: 60, h: "~1\u0447", seat: 25, full: 90, hot: false },
+    { id: "r5", from: "\u0414\u0443\u0448\u0430\u043D\u0431\u0435", to: "\u0418\u0441\u0442\u0430\u0440\u0430\u0432\u0448\u0430\u043D", km: 300, h: "~4.5\u0447", seat: 75, full: 280, hot: false },
+    { id: "r6", from: "\u0414\u0443\u0448\u0430\u043D\u0431\u0435", to: "\u0425\u043E\u0440\u043E\u0433", km: 570, h: "~10\u0447", seat: 150, full: 550, hot: false },
+    { id: "r7", from: "\u0425\u0443\u0434\u0436\u0430\u043D\u0434", to: "\u041A\u0430\u043D\u0438\u0431\u0430\u0434\u0430\u043C", km: 70, h: "~1\u0447", seat: 25, full: 95, hot: false },
+    { id: "r8", from: "\u0414\u0443\u0448\u0430\u043D\u0431\u0435", to: "\u041F\u0430\u043D\u0434\u0436\u0430\u043A\u0435\u043D\u0442", km: 130, h: "~2\u0447", seat: 45, full: 160, hot: false },
+];
+const IC_DRIVER_POOL = [
+    { id: "d1", name: "\u0424\u0430\u0440\u0440\u0443\u0445 \u041D.", r: 4.9, trips: 812, car: "Chevrolet Cobalt", plate: "01 T 234 AB", at: "12 \u043C\u0438\u043D", seatsFree: 3 },
+    { id: "d2", name: "\u0414\u0430\u043B\u0435\u0440 \u049A.", r: 4.8, trips: 540, car: "Toyota Camry", plate: "17 T 991 CD", at: "20 \u043C\u0438\u043D", seatsFree: 2 },
+    { id: "d3", name: "\u0428\u0430\u0440\u0438\u0444 \u041C.", r: 4.7, trips: 296, car: "Chevrolet Nexia 3", plate: "07 T 458 EF", at: "35 \u043C\u0438\u043D", seatsFree: 4 },
+    { id: "d4", name: "\u0423\u043C\u0430\u0440\u0430\u043B\u0438 \u0420.", r: 5.0, trips: 1204, car: "Hyundai Sonata", plate: "01 T 777 GH", at: "50 \u043C\u0438\u043D", seatsFree: 1 },
+];
+function getICDrivers(rt, mode, seats) {
+    if (mode !== "shared")
+        return [];
+    return IC_DRIVER_POOL.filter(d => d.seatsFree >= seats);
 }
 function IntercityScreen({ onBack }) {
     const [step, setStep] = useState("route");
@@ -1866,7 +1906,7 @@ function CustomerApp({ onOrder, orders }) {
         React.createElement(BottomNav, null)));
     // ── ORDERS TAB ────────────────────────────────────────────────────
     const myLive = (orders || []).filter(o => o.customer === (auth?.name || "Клиент") && o.status !== "delivered" && o.status !== "cancelled");
-    const statusRu = { new: "Новый", partner_accepted: "Готовят", courier_assigned: "Курьер назначен", picked_up: "В пути", delivered: "Доставлен", cancelled: "Отменён" };
+    const statusRu = { new: "Новый", partner_accepted: "Готовят", driver_accepted: "Курьер назначен", picked_up: "В пути", delivered: "Доставлен", cancelled: "Отменён" };
     const OrdersTab = () => (React.createElement(React.Fragment, null,
         React.createElement(SB, null),
         React.createElement("div", { style: { padding: "6px 14px 14px", background: WH, display: "flex", alignItems: "center", gap: 10 } },
@@ -2788,8 +2828,6 @@ function DriverApp({ orders, onUpdate }) {
     const [cd, setCd] = useState(15);
     const [earn, setEarn] = useState({ today: 0, orders: 0 });
     const [dTab, setDTab] = useState("map");
-    const [dNavMode, setDNavMode] = useState(false);
-    const [dNavDest, setDNavDest] = useState(null); // map|earn|profile
     const [mapLoaded, setMapLoaded] = useState(false);
     const [routeInfo, setRouteInfo] = useState(null);
     const [curStep, setCurStep] = useState(0);
@@ -3140,7 +3178,7 @@ function DriverApp({ orders, onUpdate }) {
                     " \u043A\u043C \u00B7 ",
                     routeInfo.min,
                     " \u043C\u0438\u043D"),
-                (dSt === "to_pickup" || dSt === "to_dest") && React.createElement("button", { onClick: () => openNav(dSt === "to_pickup" ? PPOS[0] : APOS[0], dSt === "to_pickup" ? PPOS[1] : APOS[1], "Маршрут"), style: { position: "absolute", bottom: 10, right: 14, zIndex: 10, background: "#FC3f1D", border: "none", borderRadius: 12, padding: "7px 12px", color: WH, fontSize: 10, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", boxShadow: "0 3px 12px rgba(252,63,29,.4)" } },
+                (dSt === "to_pickup" || dSt === "to_dest") && React.createElement("button", { onClick: () => openYandex(DPOS, dSt === "to_pickup" ? PPOS : APOS), style: { position: "absolute", bottom: 10, right: 14, zIndex: 10, background: "#FC3f1D", border: "none", borderRadius: 12, padding: "7px 12px", color: WH, fontSize: 10, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", boxShadow: "0 3px 12px rgba(252,63,29,.4)" } },
                     "\u042F\u043D\u0434\u0435\u043A\u0441",
                     React.createElement("br", null),
                     "\u041D\u0430\u0432\u0438\u0433\u0430\u0442\u043E\u0440 \u2192")),
@@ -3198,7 +3236,7 @@ function DriverApp({ orders, onUpdate }) {
                         React.createElement("button", { onClick: arrivedPickup, style: { flex: 1, padding: 11, background: BL, color: WH, border: "none", borderRadius: 11, fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" } },
                             React.createElement(Icon, { name: "target", size: 14, color: "currentColor", style: { marginRight: 5 } }),
                             "\u041D\u0430 \u043C\u0435\u0441\u0442\u0435!"),
-                        React.createElement("button", { onClick: () => { setDNavDest({ x: 190, y: 200, label: "Пассажир" }); setDNavMode(true); }, style: { padding: "11px 12px", background: `linear-gradient(135deg,${NV},#1B3A5C)`, color: WH, border: "none", borderRadius: 11, fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" } },
+                        React.createElement("button", { onClick: () => openYandex(DPOS, PPOS), style: { padding: "11px 12px", background: `linear-gradient(135deg,${NV},#1B3A5C)`, color: WH, border: "none", borderRadius: 11, fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" } },
                             React.createElement(Icon, { name: "compass", size: 14, color: "currentColor", style: { marginRight: 5 } }),
                             "\u041D\u0430\u0432\u0438\u0433\u0430\u0442\u043E\u0440"))),
                 dSt === "at_pickup" && active && React.createElement("div", { style: { padding: "10px 14px 12px", borderTop: `2px solid ${GD}` } },
@@ -3248,7 +3286,7 @@ function DriverApp({ orders, onUpdate }) {
                         React.createElement("button", { onClick: deliver, style: { flex: 2, padding: 11, background: `linear-gradient(135deg,#1B5E20,${GR})`, color: WH, border: "none", borderRadius: 11, fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" } },
                             React.createElement(Icon, { name: "flag", size: 14, color: "currentColor", style: { marginRight: 5 } }),
                             "\u0417\u0430\u0432\u0435\u0440\u0448\u0438\u0442\u044C \u043F\u043E\u0435\u0437\u0434\u043A\u0443"),
-                        React.createElement("button", { onClick: () => { setDNavDest({ x: 270, y: 104, label: active?.address || "Назначение" }); setDNavMode(true); }, style: { padding: "11px 12px", background: `linear-gradient(135deg,${NV},#1B3A5C)`, color: WH, border: "none", borderRadius: 11, fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" } },
+                        React.createElement("button", { onClick: () => openYandex(PPOS, APOS), style: { padding: "11px 12px", background: `linear-gradient(135deg,${NV},#1B3A5C)`, color: WH, border: "none", borderRadius: 11, fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" } },
                             React.createElement(Icon, { name: "compass", size: 14, color: "currentColor", style: { marginRight: 5 } }),
                             "\u041D\u0430\u0432\u0438\u0433\u0430\u0442\u043E\u0440"))),
                 dSt === "done" && React.createElement("div", { style: { padding: "13px", textAlign: "center", borderTop: `2px solid ${GR}`, background: GRL } },
@@ -3356,9 +3394,7 @@ function DriverApp({ orders, onUpdate }) {
                 React.createElement("button", { onClick: () => { setAuth(null); setOnline(false); }, style: { width: "100%", padding: 13, background: WH, color: "#DC2626", border: `1px solid ${BD}`, borderRadius: 13, fontSize: 14, fontWeight: 700, cursor: "pointer" } }, "\u0412\u044B\u0439\u0442\u0438 \u0438\u0437 \u0430\u043A\u043A\u0430\u0443\u043D\u0442\u0430")),
             React.createElement("div", { style: { display: "flex", background: WH, borderTop: `1px solid ${BD}`, flexShrink: 0 } }, [{ id: "map", e: "🗺️", l: "Карта" }, { id: "earn", e: "💰", l: "Заработок" }, { id: "profile", e: "👤", l: "Профиль" }].map(t => (React.createElement("button", { key: t.id, onClick: () => setDTab(t.id), style: { flex: 1, padding: "8px 4px", background: "none", border: "none", display: "flex", flexDirection: "column", alignItems: "center", gap: 3, cursor: "pointer" } },
                 React.createElement("span", { style: { fontSize: 19, filter: dTab === t.id ? "none" : "grayscale(100%) opacity(35%)" } }, t.e),
-                React.createElement("span", { style: { fontSize: 9, fontWeight: 700, color: dTab === t.id ? GR : MG } }, t.l)))))),
-        dNavMode && dNavDest && React.createElement("div", { style: { position: "absolute", inset: 0, zIndex: 200, display: "flex", flexDirection: "column" } },
-            React.createElement(NavScreen, { city: "\u0414\u0443\u0448\u0430\u043D\u0431\u0435", from: { x: 190, y: 200 }, to: dNavDest, label: dNavDest.label || "Назначение", onArrived: () => { setDNavMode(false); }, onClose: () => setDNavMode(false) }))));
+                React.createElement("span", { style: { fontSize: 9, fontWeight: 700, color: dTab === t.id ? GR : MG } }, t.l))))))));
 }
 // ════════════════════════════════════════════════════════════════════
 //  ADMIN APP  — полная видимость системы
@@ -3482,7 +3518,7 @@ function AdminApp({ orders, onUpdate }) {
                                 it.qty,
                                 "\u00D7 ",
                                 it.name)),
-                            React.createElement("div", { style: { marginTop: 7, display: "flex", gap: 4, flexWrap: "wrap" } }, ["new", "partner_accepted", "ready", "delivered"].map(s => (React.createElement("button", { key: s, onClick: e => { e.stopPropagation(); onUpdate(o.id, s); }, style: { padding: "4px 7px", borderRadius: 6, border: `1px solid ${ADMA}55`, background: o.status === s ? ADML : BG, color: o.status === s ? ADMA : GY, fontSize: 9, fontWeight: 700, cursor: "pointer" } }, s))))))))),
+                            React.createElement("div", { style: { marginTop: 7, display: "flex", gap: 4, flexWrap: "wrap" } }, ["new", "partner_accepted", "ready", "driver_accepted", "picked_up", "delivered", "declined"].map(s => (React.createElement("button", { key: s, onClick: e => { e.stopPropagation(); onUpdate(o.id, s); }, style: { padding: "4px 7px", borderRadius: 6, border: `1px solid ${ADMA}55`, background: o.status === s ? ADML : BG, color: o.status === s ? ADMA : GY, fontSize: 9, fontWeight: 700, cursor: "pointer" } }, sBdg(s).props.l))))))))),
             tab === "partners" && React.createElement("div", { style: { padding: 12 } },
                 React.createElement("div", { style: { display: "flex", gap: 5, marginBottom: 10 } }, [{ id: "active", l: "Активные" }, { id: "pending", l: "На проверке" }].map(f => (React.createElement("button", { key: f.id, onClick: () => setPFilter(f.id), style: { padding: "5px 10px", borderRadius: 8, border: `1px solid ${pFilter === f.id ? ADMA : BD}`, background: pFilter === f.id ? ADML : WH, color: pFilter === f.id ? ADMA : GY, fontSize: 10, fontWeight: 700, cursor: "pointer" } }, f.l)))),
                 MOCK_PARTNERS.filter(p => p.status === pFilter).map(p => (React.createElement("div", { key: p.id, style: { background: WH, borderRadius: 13, border: `1px solid ${BD}`, padding: 12, marginBottom: 7 } },
@@ -3734,7 +3770,7 @@ function ZudGoEcosystem() {
     const updateOrder = (id, status) => setOrders(p => p.map(o => o.id === id ? { ...o, status } : o));
     // Автопрогресс заказов — партнёр готовит, курьер везёт (живой цикл)
     useEffect(() => {
-        const flow = { new: "partner_accepted", partner_accepted: "courier_assigned", courier_assigned: "picked_up", picked_up: "delivered" };
+        const flow = { new: "partner_accepted", partner_accepted: "driver_accepted", driver_accepted: "picked_up", picked_up: "delivered" };
         const t = setInterval(() => {
             setOrders(prev => {
                 const idx = prev.findIndex(o => flow[o.status] && o.status !== "delivered" && o.status !== "cancelled");
