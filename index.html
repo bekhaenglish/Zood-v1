@@ -1895,14 +1895,17 @@ function CustomerApp({ onOrder, orders }) {
     const isGuest = auth?.guest === true;
     // ── Toast уведомления ─────────────────────────────────────────
     const [toasts, setToasts] = useState([]);
+    const [notifsOn, setNotifsOn] = useStore("zood_notifs_on_v1", true);
     function toast(msg, type) {
+        if (!notifsOn) return;
         const id = Date.now();
         setToasts(p => [...p, { id, msg, type }]);
         setTimeout(() => setToasts(p => p.filter(t => t.id !== id)), 3500);
     }
     ;
-    // ── Чат с водителем ────────────────────────────────────────────
+    // ── Чат с водителем / поддержкой ─────────────────────────────────
     const [showChat, setShowChat] = useState(false);
+    const [chatPeer, setChatPeer] = useState({ name: "Акбар Д.", icon: "bike", status: "● Онлайн" });
     const [chatMsgs, setChatMsgs] = useState([
         { id: 1, from: "driver", text: "Еду к вам, буду через 3 мин 👋", time: "14:25" },
         { id: 2, from: "me", text: "Хорошо, жду у подъезда", time: "14:25" },
@@ -1995,6 +1998,8 @@ function CustomerApp({ onOrder, orders }) {
     const [editingAddr, setEditingAddr] = useState(null);
     function saveAddr(a) { setSavedAddrs(prev => editingAddr ? (prev || []).map(x => x.id === a.id ? a : x) : [...(prev || []), a]); setEditingAddr(null); setShowAddrSheet(false); }
     function removeAddr(id) { setSavedAddrs(prev => (prev || []).filter(x => x.id !== id)); }
+    // support FAQ accordion
+    const [faqOpenIdx, setFaqOpenIdx] = useState(null);
     // notifs
     const [notifs, setNotifs] = useState(NOTIFS);
     const unread = notifs.filter(n => !n.read).length;
@@ -2250,8 +2255,8 @@ function CustomerApp({ onOrder, orders }) {
                         { ic: "pin", l: "Мои адреса", s: "addresses" },
                         { ic: "card", l: "Способы оплаты", s: "payment_methods", sub: savedCards.length ? `АЛИФ Пэй + ${savedCards.length} карт${savedCards.length === 1 ? "а" : "ы"}` : "АЛИФ Пэй, Эсхата, Корти Милли" },
                         { ic: "gift", l: "Промокоды и бонусы", s: "promo_tab", badge: promos.filter(p => !p.used).length },
-                        { ic: "chat", l: "Поддержка", sub: "Чат, звонок, FAQ" },
-                        { ic: "settings", l: "Настройки" },
+                        { ic: "chat", l: "Поддержка", s: "support", sub: "Чат, звонок, FAQ" },
+                        { ic: "settings", l: "Настройки", s: "settings" },
                         { ic: "doc", l: "О приложении", sub: "ZOOD v1.0 · СНГ" },
                     ].map((item, i) => (React.createElement("div", { key: i, onClick: () => item.s && setScr(item.s), style: { ...card, padding: "12px 14px", marginBottom: 8, display: "flex", alignItems: "center", gap: 11, cursor: item.s ? "pointer" : "default" } },
                         React.createElement("div", { style: { width: 38, height: 38, background: BG, borderRadius: 11, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, flexShrink: 0 } },
@@ -2303,6 +2308,61 @@ function CustomerApp({ onOrder, orders }) {
                         React.createElement("button", { onClick: () => removeCard(c.id), style: { border: "none", background: "none", color: MG, cursor: "pointer", fontSize: 18, padding: 6 } }, "✕")))),
                     React.createElement("button", { onClick: () => setShowAddCard(true), style: { width: "100%", padding: "13px", background: BG, color: NV, border: `1.5px dashed ${BD}`, borderRadius: 13, fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", marginTop: 4 } }, "+ Привязать новую карту"))),
             showAddCard && React.createElement(AddCardSheet, { onClose: () => setShowAddCard(false), onSave: c => { setSavedCards(prev => [...(prev || []), c]); setShowAddCard(false); } })));
+    }
+    // ── SUPPORT ────────────────────────────────────────────────────────
+    function Support() {
+        const FAQ = [
+            { q: "Как отменить заказ?", a: "Откройте активный заказ и нажмите «Отменить». Если водитель уже в пути, может применяться штраф." },
+            { q: "Как вернуть деньги за отменённый заказ?", a: "Возврат приходит на тот же способ оплаты автоматически в течение 1–3 рабочих дней." },
+            { q: "Водитель опаздывает, что делать?", a: "Свяжитесь с водителем через кнопку звонка на экране заказа или напишите нам в чат." },
+            { q: "Как изменить номер телефона?", a: "Пока смена номера доступна только через поддержку — напишите нам в чат ниже." },
+            { q: "Как работают промокоды?", a: "Введите код в поле «Промокод» перед заказом такси — скидка применится сразу." },
+        ];
+        return (React.createElement(React.Fragment, null,
+            React.createElement(SB, null),
+            React.createElement("div", { style: { padding: "5px 13px 13px", background: WH, display: "flex", alignItems: "center", gap: 9 } },
+                React.createElement(Back, { to: "profile_tab" }),
+                React.createElement("span", { style: { fontWeight: 800, fontSize: 16, color: DK } }, "Поддержка")),
+            React.createElement("div", { style: sc },
+                React.createElement("div", { style: { padding: "0 13px 22px" } },
+                    React.createElement("div", { style: { display: "flex", gap: 8, marginBottom: 18 } },
+                        React.createElement("a", { href: "tel:+992900000000", style: { flex: 1, textDecoration: "none", ...card, padding: "14px 10px", textAlign: "center", display: "block" } },
+                            React.createElement("div", { style: { fontSize: 22, marginBottom: 4 } }, "📞"),
+                            React.createElement("div", { style: { fontWeight: 700, fontSize: 12, color: DK } }, "Позвонить"),
+                            React.createElement("div", { style: { fontSize: 10, color: GY, marginTop: 1 } }, "24/7")),
+                        React.createElement("div", { onClick: () => { setChatPeer({ name: "Поддержка ZOOD", icon: "chat", status: "● Работаем 24/7" }); setChatMsgs([{ id: Date.now(), from: "support", text: "Здравствуйте! Чем можем помочь? 👋", time: new Date().toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" }) }]); setShowChat(true); }, style: { flex: 1, cursor: "pointer", ...card, padding: "14px 10px", textAlign: "center" } },
+                            React.createElement("div", { style: { fontSize: 22, marginBottom: 4 } }, "💬"),
+                            React.createElement("div", { style: { fontWeight: 700, fontSize: 12, color: DK } }, "Написать в чат"),
+                            React.createElement("div", { style: { fontSize: 10, color: GY, marginTop: 1 } }, "Ответим быстро"))),
+                    React.createElement("div", { style: { fontWeight: 700, fontSize: 10, color: MG, letterSpacing: 1, marginBottom: 10 } }, "ЧАСТЫЕ ВОПРОСЫ"),
+                    FAQ.map((f, i) => (React.createElement("div", { key: i, style: { ...card, marginBottom: 8, overflow: "hidden" } },
+                        React.createElement("div", { onClick: () => setFaqOpenIdx(faqOpenIdx === i ? null : i), style: { padding: "13px 14px", display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer", gap: 10 } },
+                            React.createElement("span", { style: { fontWeight: 600, fontSize: 12.5, color: DK } }, f.q),
+                            React.createElement("span", { style: { color: MG, fontSize: 14, flexShrink: 0, transform: faqOpenIdx === i ? "rotate(180deg)" : "none", transition: "transform .2s" } }, "▾")),
+                        faqOpenIdx === i && React.createElement("div", { style: { padding: "0 14px 13px", fontSize: 12, color: GY, lineHeight: 1.6 } }, f.a))))))));
+    }
+    // ── SETTINGS ───────────────────────────────────────────────────────
+    function Settings() {
+        return (React.createElement(React.Fragment, null,
+            React.createElement(SB, null),
+            React.createElement("div", { style: { padding: "5px 13px 13px", background: WH, display: "flex", alignItems: "center", gap: 9 } },
+                React.createElement(Back, { to: "profile_tab" }),
+                React.createElement("span", { style: { fontWeight: 800, fontSize: 16, color: DK } }, "Настройки")),
+            React.createElement("div", { style: sc },
+                React.createElement("div", { style: { padding: "0 13px 22px" } },
+                    React.createElement("div", { style: { fontWeight: 700, fontSize: 10, color: MG, letterSpacing: 1, marginBottom: 10 } }, "ЯЗЫК ИНТЕРФЕЙСА"),
+                    React.createElement("div", { style: { display: "flex", gap: 8, marginBottom: 20 } }, [["ru", "Русский"], ["tj", "Тоҷикӣ"]].map(([id, l]) => (React.createElement("button", { key: id, onClick: () => setLang(id), style: { flex: 1, padding: "12px", borderRadius: 13, border: `2px solid ${lang === id ? R : BD}`, background: lang === id ? RL : WH, color: lang === id ? R : DK, fontWeight: 700, fontSize: 13, cursor: "pointer", fontFamily: "inherit" } }, l)))),
+                    React.createElement("div", { style: { fontWeight: 700, fontSize: 10, color: MG, letterSpacing: 1, marginBottom: 10 } }, "УВЕДОМЛЕНИЯ"),
+                    React.createElement("div", { style: { ...card, padding: "13px 14px", marginBottom: 20, display: "flex", alignItems: "center", gap: 11 } },
+                        React.createElement("div", { style: { flex: 1 } },
+                            React.createElement("div", { style: { fontWeight: 700, fontSize: 13, color: DK } }, "Push-уведомления"),
+                            React.createElement("div", { style: { fontSize: 10, color: GY, marginTop: 1 } }, "Статус заказа, акции, новости")),
+                        React.createElement("div", { onClick: () => setNotifsOn(v => !v), style: { width: 50, height: 28, borderRadius: 14, background: notifsOn ? GR : BD, position: "relative", cursor: "pointer", transition: "background .2s", flexShrink: 0 } },
+                            React.createElement("div", { style: { width: 22, height: 22, borderRadius: "50%", background: WH, position: "absolute", top: 3, left: notifsOn ? 25 : 3, transition: "left .2s", boxShadow: "0 1px 3px rgba(0,0,0,.3)" } }))),
+                    React.createElement("div", { style: { fontWeight: 700, fontSize: 10, color: MG, letterSpacing: 1, marginBottom: 10 } }, "О ПРИЛОЖЕНИИ"),
+                    React.createElement("div", { style: { ...card, padding: "13px 14px", display: "flex", justifyContent: "space-between", alignItems: "center" } },
+                        React.createElement("span", { style: { fontSize: 12.5, color: GY } }, "Версия"),
+                        React.createElement("span", { style: { fontSize: 12.5, fontWeight: 700, color: DK } }, "ZOOD v1.0"))))));
     }
     // ── CHECKOUT ──────────────────────────────────────────────────────
     function Checkout() {
@@ -2882,10 +2942,10 @@ function CustomerApp({ onOrder, orders }) {
             React.createElement("div", { style: { background: WH, borderRadius: "22px 22px 0 0", width: "100%", height: "70%", display: "flex", flexDirection: "column" } },
                 React.createElement("div", { style: { padding: "10px 16px 8px", borderBottom: `1px solid ${BD}`, display: "flex", alignItems: "center", gap: 10, flexShrink: 0 } },
                     React.createElement("div", { style: { width: 38, height: 38, background: GRL, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18 } },
-                        React.createElement(Icon, { name: "bike", size: 15, color: "currentColor" })),
+                        React.createElement(Icon, { name: chatPeer.icon, size: 15, color: "currentColor" })),
                     React.createElement("div", null,
-                        React.createElement("div", { style: { fontWeight: 700, fontSize: 13, color: DK } }, "\u0410\u043A\u0431\u0430\u0440 \u0414."),
-                        React.createElement("div", { style: { fontSize: 10, color: GR } }, "\u25CF \u041E\u043D\u043B\u0430\u0439\u043D")),
+                        React.createElement("div", { style: { fontWeight: 700, fontSize: 13, color: DK } }, chatPeer.name),
+                        React.createElement("div", { style: { fontSize: 10, color: GR } }, chatPeer.status)),
                     React.createElement("button", { onClick: () => setShowChat(false), style: { marginLeft: "auto", background: "none", border: "none", fontSize: 20, color: MG, cursor: "pointer", lineHeight: 1 } }, "\u2715")),
                 React.createElement("div", { style: { flex: 1, overflowY: "auto", padding: "12px 14px", display: "flex", flexDirection: "column", gap: 8 } }, chatMsgs.map(m => (React.createElement("div", { key: m.id, style: { display: "flex", justifyContent: m.from === "me" ? "flex-end" : "flex-start" } },
                     React.createElement("div", { style: { maxWidth: "75%", background: m.from === "me" ? R : BG, color: m.from === "me" ? WH : DK, borderRadius: m.from === "me" ? "16px 16px 4px 16px" : "16px 16px 16px 4px", padding: "9px 12px", fontSize: 12, lineHeight: 1.5 } },
@@ -2900,6 +2960,8 @@ function CustomerApp({ onOrder, orders }) {
         scr === "promo_tab" && PromosTab(),
         scr === "profile_tab" && ProfileTab(),
         scr === "payment_methods" && PaymentMethods(),
+        scr === "support" && Support(),
+        scr === "settings" && Settings(),
         scr === "taxi" && React.createElement(TaxiScreen, { onBack: () => setScr("home"), onHelp: () => setScr("help") }),
         scr === "checkout" && Checkout(),
         scr === "tracking" && Tracking(),
