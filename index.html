@@ -754,6 +754,54 @@ function PaymentSheet({ payMethod, setPayMethod, onClose, cards = [], onAddCard 
                 React.createElement("div", { style: { width: 22, height: 22, borderRadius: "50%", border: `2px solid ${m.id === payMethod ? GR : BD}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 } }, m.id === payMethod && React.createElement("div", { style: { width: 11, height: 11, borderRadius: "50%", background: GR } }))))),
             React.createElement("button", { onClick: onAddCard, style: { width: "100%", padding: "11px", marginTop: 10, background: "none", border: "none", color: GR, fontWeight: 700, fontSize: 13, cursor: "pointer", fontFamily: "inherit" } }, "+ \u0414\u043E\u0431\u0430\u0432\u0438\u0442\u044C \u043A\u0430\u0440\u0442\u0443"))));
 }
+function AddAddressSheet({ initial, onSave, onClose }) {
+    const [label, setLabel] = useState(initial?.label || "");
+    const [addr, setAddr] = useState(initial?.addr || "");
+    const [icon, setIcon] = useState(initial?.icon || "\uD83D\uDCCD");
+    const [lat, setLat] = useState(initial?.lat ?? null);
+    const [lng, setLng] = useState(initial?.lng ?? null);
+    const [suggest, setSuggest] = useState([]);
+    const timerRef = useRef(null);
+    const ICONS = ["\uD83C\uDFE0", "\uD83D\uDCBC", "\uD83D\uDC64", "\uD83D\uDCCD", "\uD83C\uDFE2", "\uD83C\uDF93"];
+    function onAddrInput(v) {
+        setAddr(v);
+        setLat(null);
+        setLng(null);
+        if (!v) { setSuggest([]); return; }
+        const q = v.toLowerCase();
+        setSuggest(DUSHANBE_PLACES.filter(p => p.name.toLowerCase().includes(q) || p.addr.toLowerCase().includes(q)).slice(0, 5));
+        if (v.length >= 3) {
+            clearTimeout(timerRef.current);
+            timerRef.current = setTimeout(async () => {
+                const real = await geocodeSearch(v, "tj");
+                if (real && real.length) setSuggest(real);
+            }, 500);
+        }
+    }
+    function pick(p) { setAddr(p.name); setLat(p.lat); setLng(p.lng); setSuggest([]); }
+    const canSave = label.trim().length > 0 && addr.trim().length > 0;
+    function submit() {
+        if (!canSave) return;
+        onSave({ id: initial?.id || "a" + Date.now(), icon, label: label.trim(), addr: addr.trim(), lat, lng, sub: "\u0421\u043E\u0445\u0440\u0430\u043D\u0451\u043D\u043D\u044B\u0439" });
+    }
+    return (React.createElement("div", { style: { position: "fixed", inset: 0, background: "rgba(0,0,0,.45)", zIndex: 320, display: "flex", alignItems: "flex-end" }, onClick: onClose },
+        React.createElement("div", { onClick: e => e.stopPropagation(), style: { background: WH, borderRadius: "22px 22px 0 0", padding: "10px 18px 26px", width: "100%", maxWidth: 460, margin: "0 auto", animation: "sheetUp .28s ease" } },
+            React.createElement("div", { style: { width: 38, height: 4, background: BD, borderRadius: 2, margin: "0 auto 14px" } }),
+            React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 } },
+                React.createElement("span", { style: { fontWeight: 800, fontSize: 17, color: DK } }, initial ? "\u270F\uFE0F \u0418\u0437\u043C\u0435\u043D\u0438\u0442\u044C \u0430\u0434\u0440\u0435\u0441" : "\uD83D\uDCCD \u041D\u043E\u0432\u044B\u0439 \u0430\u0434\u0440\u0435\u0441"),
+                React.createElement("div", { onClick: onClose, style: { width: 30, height: 30, background: BG, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontSize: 14, color: GY } }, "\u2715")),
+            React.createElement("div", { style: { display: "flex", gap: 7, marginBottom: 12 } }, ICONS.map(e => React.createElement("button", { key: e, onClick: () => setIcon(e), style: { width: 40, height: 40, borderRadius: 11, border: `2px solid ${icon === e ? R : BD}`, background: icon === e ? RL : WH, fontSize: 18, cursor: "pointer" } }, e))),
+            React.createElement("input", { value: label, onChange: e => setLabel(e.target.value), placeholder: "\u041D\u0430\u0437\u0432\u0430\u043D\u0438\u0435 (\u0414\u043E\u043C, \u0420\u0430\u0431\u043E\u0442\u0430...)", style: { width: "100%", padding: "13px 14px", borderRadius: 13, border: `1.5px solid ${BD}`, fontSize: 14, fontFamily: "inherit", outline: "none", boxSizing: "border-box", marginBottom: 10 } }),
+            React.createElement("div", { style: { position: "relative", marginBottom: 18 } },
+                React.createElement("input", { value: addr, onChange: e => onAddrInput(e.target.value), placeholder: "\u0410\u0434\u0440\u0435\u0441", style: { width: "100%", padding: "13px 14px", borderRadius: 13, border: `1.5px solid ${BD}`, fontSize: 14, fontFamily: "inherit", outline: "none", boxSizing: "border-box" } }),
+                suggest.length > 0 && React.createElement("div", { style: { position: "absolute", top: "100%", left: 0, right: 0, background: WH, borderRadius: 12, boxShadow: "0 8px 28px rgba(0,0,0,.16)", zIndex: 30, marginTop: 4, maxHeight: 200, overflowY: "auto", border: `1px solid ${BD}` } },
+                    suggest.map(p => React.createElement("div", { key: p.name, onClick: () => pick(p), style: { padding: "10px 13px", fontSize: 12, display: "flex", alignItems: "center", gap: 8, cursor: "pointer", borderBottom: `1px solid ${BG}` } },
+                        React.createElement("span", { style: { fontSize: 14 } }, "\uD83D\uDCCD"),
+                        React.createElement("div", null,
+                            React.createElement("div", { style: { fontWeight: 600 } }, p.name),
+                            React.createElement("div", { style: { fontSize: 10, color: GY } }, p.addr)))))),
+            React.createElement("button", { onClick: submit, disabled: !canSave, style: { width: "100%", padding: 15, background: canSave ? NV : BD, color: canSave ? WH : MG, border: "none", borderRadius: 15, fontSize: 14, fontWeight: 800, cursor: canSave ? "pointer" : "default", fontFamily: "inherit" } }, initial ? "\u0421\u043E\u0445\u0440\u0430\u043D\u0438\u0442\u044C" : "\u0414\u043E\u0431\u0430\u0432\u0438\u0442\u044C \u0430\u0434\u0440\u0435\u0441"))));
+}
 function TaxiScreen({ onBack, onHelp }) {
     const [stops, setStops] = useState([{ id: "a", addr: "", ph: "📍 Откуда", lat: null, lng: null }, { id: "b", addr: "", ph: "🏁 Куда", lat: null, lng: null }]);
     const [tTariff, setTTariff] = useState(null);
@@ -1941,6 +1989,12 @@ function CustomerApp({ onOrder, orders }) {
     const [savedCards, setSavedCards] = useStore("zood_cards_v1", []);
     const [showAddCard, setShowAddCard] = useState(false);
     function removeCard(id) { setSavedCards(prev => (prev || []).filter(c => c.id !== id)); }
+    // saved addresses
+    const [savedAddrs, setSavedAddrs] = useStore("zood_addrs_v1", SAVED_ADDRESSES);
+    const [showAddrSheet, setShowAddrSheet] = useState(false);
+    const [editingAddr, setEditingAddr] = useState(null);
+    function saveAddr(a) { setSavedAddrs(prev => editingAddr ? (prev || []).map(x => x.id === a.id ? a : x) : [...(prev || []), a]); setEditingAddr(null); setShowAddrSheet(false); }
+    function removeAddr(id) { setSavedAddrs(prev => (prev || []).filter(x => x.id !== id)); }
     // notifs
     const [notifs, setNotifs] = useState(NOTIFS);
     const unread = notifs.filter(n => !n.read).length;
@@ -1970,7 +2024,7 @@ function CustomerApp({ onOrder, orders }) {
     }, [scr]);
     function openPartner(p) { setPartner(p); setPCat(p.cats[0]); setScr("partner"); }
     ;
-    function startCheckout() { setChkStep("address"); setChkAddr(SAVED_ADDRESSES[0]); setChkPay(PAY_METHODS[0]); setShowCart(false); setScr("checkout"); }
+    function startCheckout() { setChkStep("address"); setChkAddr((savedAddrs && savedAddrs[0]) || SAVED_ADDRESSES[0]); setChkPay(PAY_METHODS[0]); setShowCart(false); setScr("checkout"); }
     ;
     function processPayment() {
         setChkStep("processing");
@@ -2269,13 +2323,13 @@ function CustomerApp({ onOrder, orders }) {
             React.createElement("div", { style: sc },
                 chkStep === "address" && React.createElement("div", { style: { padding: "0 14px 22px" } },
                     React.createElement("div", { style: { fontWeight: 700, fontSize: 10, color: MG, letterSpacing: 1, marginBottom: 11 } }, "\u0410\u0414\u0420\u0415\u0421 \u0414\u041E\u0421\u0422\u0410\u0412\u041A\u0418"),
-                    SAVED_ADDRESSES.map(addr => (React.createElement("div", { key: addr.id, onClick: () => setChkAddr(addr), style: { ...card, padding: "13px 15px", marginBottom: 9, cursor: "pointer", border: `2px solid ${chkAddr.id === addr.id ? R : BD}`, background: chkAddr.id === addr.id ? RL : WH, display: "flex", gap: 12, alignItems: "center", transition: "all .15s" } },
+                    savedAddrs.map(addr => (React.createElement("div", { key: addr.id, onClick: () => setChkAddr(addr), style: { ...card, padding: "13px 15px", marginBottom: 9, cursor: "pointer", border: `2px solid ${chkAddr.id === addr.id ? R : BD}`, background: chkAddr.id === addr.id ? RL : WH, display: "flex", gap: 12, alignItems: "center", transition: "all .15s" } },
                         React.createElement("div", { style: { width: 40, height: 40, background: chkAddr.id === addr.id ? R : BG, borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, flexShrink: 0, transition: "background .15s" } }, addr.icon),
                         React.createElement("div", { style: { flex: 1 } },
                             React.createElement("div", { style: { fontWeight: 700, fontSize: 13, color: chkAddr.id === addr.id ? R : DK } }, addr.label),
                             React.createElement("div", { style: { fontSize: 10, color: GY, marginTop: 2 } }, addr.addr)),
                         chkAddr.id === addr.id && React.createElement("span", { style: { color: R, fontSize: 19, fontWeight: 700 } }, "\u2713")))),
-                    React.createElement("button", { style: { width: "100%", padding: "12px", background: BG, color: DK, border: `1.5px dashed ${BD}`, borderRadius: 13, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", marginBottom: 18 } }, "+ \u0414\u0440\u0443\u0433\u043E\u0439 \u0430\u0434\u0440\u0435\u0441"),
+                    React.createElement("button", { onClick: () => { setEditingAddr(null); setShowAddrSheet(true); }, style: { width: "100%", padding: "12px", background: BG, color: DK, border: `1.5px dashed ${BD}`, borderRadius: 13, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", marginBottom: 18 } }, "+ \u0414\u0440\u0443\u0433\u043E\u0439 \u0430\u0434\u0440\u0435\u0441"),
                     React.createElement("div", { style: { fontWeight: 700, fontSize: 10, color: MG, letterSpacing: 1, marginBottom: 10 } }, "\u0421\u041E\u0421\u0422\u0410\u0412 \u0417\u0410\u041A\u0410\u0417\u0410"),
                     React.createElement("div", { style: { ...card, padding: "11px 13px", marginBottom: 18 } },
                         cart.items.map(it => React.createElement("div", { key: it.id, style: { display: "flex", alignItems: "center", gap: 9, padding: "7px 0", borderBottom: `1px solid ${BD}` } },
@@ -2324,7 +2378,8 @@ function CustomerApp({ onOrder, orders }) {
                         React.createElement("span", { style: { color: i === 2 ? DK : GY } }, l),
                         React.createElement("span", { style: { color: i === 2 ? R : DK, fontWeight: i === 2 ? 800 : 600 } }, v))))),
                     React.createElement(Btn, { label: `${chkPay.icon} Оплатить ${total} с.`, on: true, onClick: processPayment, color: chkPay.accent || R }))),
-            showAddCard && React.createElement(AddCardSheet, { onClose: () => setShowAddCard(false), onSave: c => { setSavedCards(prev => [...(prev || []), c]); setChkPay({ id: c.id, label: `${c.brandLabel} •••• ${c.last4}`, icon: "💳", balance: null, accent: "#1A1A2E", bg: "#F1F5F9" }); setShowAddCard(false); } })));
+            showAddCard && React.createElement(AddCardSheet, { onClose: () => setShowAddCard(false), onSave: c => { setSavedCards(prev => [...(prev || []), c]); setChkPay({ id: c.id, label: `${c.brandLabel} •••• ${c.last4}`, icon: "💳", balance: null, accent: "#1A1A2E", bg: "#F1F5F9" }); setShowAddCard(false); } }),
+            showAddrSheet && React.createElement(AddAddressSheet, { initial: editingAddr, onClose: () => { setShowAddrSheet(false); setEditingAddr(null); }, onSave: a => { saveAddr(a); setChkAddr(a); } })));
     }
     ;
     // ── PARTNER DETAIL ────────────────────────────────────────────────
@@ -2560,13 +2615,16 @@ function CustomerApp({ onOrder, orders }) {
             React.createElement("span", { style: { fontWeight: 800, fontSize: 16, color: DK } }, "\u041C\u043E\u0438 \u0430\u0434\u0440\u0435\u0441\u0430")),
         React.createElement("div", { style: sc },
             React.createElement("div", { style: { padding: "0 13px 22px" } },
-                SAVED_ADDRESSES.map(a => (React.createElement("div", { key: a.id, style: { ...card, padding: "13px 14px", marginBottom: 9, display: "flex", gap: 11, alignItems: "center" } },
+                savedAddrs.length === 0 && React.createElement("div", { style: { textAlign: "center", padding: "26px 16px", color: GY, fontSize: 12.5 } }, "\u041D\u0435\u0442 \u0441\u043E\u0445\u0440\u0430\u043D\u0451\u043D\u043D\u044B\u0445 \u0430\u0434\u0440\u0435\u0441\u043E\u0432"),
+                savedAddrs.map(a => (React.createElement("div", { key: a.id, style: { ...card, padding: "13px 14px", marginBottom: 9, display: "flex", gap: 11, alignItems: "center" } },
                     React.createElement("div", { style: { width: 42, height: 42, background: RL, borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, flexShrink: 0 } }, a.icon),
-                    React.createElement("div", { style: { flex: 1 } },
+                    React.createElement("div", { style: { flex: 1, minWidth: 0 } },
                         React.createElement("div", { style: { fontWeight: 700, fontSize: 13, color: DK } }, a.label),
                         React.createElement("div", { style: { fontSize: 11, color: GY, marginTop: 2 } }, a.addr)),
-                    React.createElement("button", { style: { background: "none", border: "none", color: MG, cursor: "pointer" } }, "\u270F\uFE0F")))),
-                React.createElement("button", { style: { width: "100%", padding: "12px", background: BG, border: `1.5px dashed ${BD}`, borderRadius: 13, fontSize: 12, fontWeight: 600, color: DK, cursor: "pointer", fontFamily: "inherit" } }, "+ \u0414\u043E\u0431\u0430\u0432\u0438\u0442\u044C \u0430\u0434\u0440\u0435\u0441")))));
+                    React.createElement("button", { onClick: () => { setEditingAddr(a); setShowAddrSheet(true); }, style: { background: "none", border: "none", color: MG, cursor: "pointer", fontSize: 15, padding: 6 } }, "\u270F\uFE0F"),
+                    React.createElement("button", { onClick: () => removeAddr(a.id), style: { background: "none", border: "none", color: MG, cursor: "pointer", fontSize: 16, padding: 6 } }, "\u2715")))),
+                React.createElement("button", { onClick: () => { setEditingAddr(null); setShowAddrSheet(true); }, style: { width: "100%", padding: "12px", background: BG, border: `1.5px dashed ${BD}`, borderRadius: 13, fontSize: 12, fontWeight: 600, color: DK, cursor: "pointer", fontFamily: "inherit" } }, "+ \u0414\u043E\u0431\u0430\u0432\u0438\u0442\u044C \u0430\u0434\u0440\u0435\u0441"))),
+        showAddrSheet && React.createElement(AddAddressSheet, { initial: editingAddr, onClose: () => { setShowAddrSheet(false); setEditingAddr(null); }, onSave: saveAddr })));
     const Help = () => (React.createElement("div", { style: { display: "flex", flexDirection: "column", height: "100%" } },
         React.createElement("div", { style: { position: "absolute", top: 0, left: 0, right: 0, zIndex: 10, padding: "10px 13px" } },
             React.createElement("button", { onClick: () => setScr("home"), style: { background: "rgba(255,255,255,.9)", border: "none", borderRadius: 11, padding: "7px 12px", fontSize: 12, fontWeight: 700, cursor: "pointer", color: DK, fontFamily: "inherit" } }, "\u2190 \u0413\u043B\u0430\u0432\u043D\u0430\u044F")),
