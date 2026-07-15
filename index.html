@@ -585,7 +585,7 @@ function debouncedGeo(timerRef, val, country, idx, setSuggest) {
    ═══════════════════════════════════════════════════════════════════ */
 // ── Cart ──────────────────────────────────────────────────────────
 function useCart() {
-    const [items, setItems] = useState([]);
+    const [items, setItems] = useStore("zood_cart_v1", []);
     const add = i => setItems(p => { const ex = p.find(x => x.id === i.id); return ex ? p.map(x => x.id === i.id ? { ...x, qty: x.qty + 1 } : x) : [...p, { ...i, qty: 1 }]; });
     const remove = id => setItems(p => { const ex = p.find(x => x.id === id); if (!ex)
         return p; return ex.qty === 1 ? p.filter(x => x.id !== id) : p.map(x => x.id === id ? { ...x, qty: x.qty - 1 } : x); });
@@ -3737,6 +3737,8 @@ function AdminApp({ orders, onUpdate }) {
     const [oFilter, setOFilter] = useState("all");
     const [pFilter, setPFilter] = useState("active");
     const [selOrd, setSelOrd] = useState(null);
+    const [partners, setPartners] = useState(MOCK_PARTNERS);
+    function setPartnerStatus(id, status) { setPartners(prev => prev.map(p => p.id === id ? { ...p, status } : p)); }
     const sc = { flex: 1, overflowY: "auto", scrollbarWidth: "none" };
     function SB() { return (React.createElement("div", { style: { background: ADM, padding: "10px 22px 5px", display: "flex", justifyContent: "space-between", flexShrink: 0 } },
         React.createElement("span", { style: { color: WH, fontSize: 13, fontWeight: 700 } }, "9:41"),
@@ -3762,7 +3764,7 @@ function AdminApp({ orders, onUpdate }) {
                         auth.name,
                         " \u00B7 \u041F\u043E\u043B\u043D\u044B\u0439 \u0434\u043E\u0441\u0442\u0443\u043F")),
                 React.createElement("button", { onClick: () => setAuth(null), style: { background: "rgba(255,255,255,.1)", border: "none", color: "rgba(255,255,255,.55)", borderRadius: 7, padding: "5px 9px", fontSize: 9, cursor: "pointer" } }, "\u0412\u044B\u0439\u0442\u0438")),
-            React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 5 } }, [[orders.length, "📦", "Заказов"], [`${revenue}с.`, "💰", "Выручка"], [onlineDrvrs.length, "🚴", "Онлайн"], [MOCK_PARTNERS.filter(p => p.status === "pending").length, "⏳", "Заявки"]].map(([v, e, l]) => (React.createElement("div", { key: l, style: { background: "rgba(255,255,255,.1)", borderRadius: 9, padding: "7px 4px", textAlign: "center" } },
+            React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 5 } }, [[orders.length, "📦", "Заказов"], [`${revenue}с.`, "💰", "Выручка"], [onlineDrvrs.length, "🚴", "Онлайн"], [partners.filter(p => p.status === "pending").length, "⏳", "Заявки"]].map(([v, e, l]) => (React.createElement("div", { key: l, style: { background: "rgba(255,255,255,.1)", borderRadius: 9, padding: "7px 4px", textAlign: "center" } },
                 React.createElement("div", { style: { color: WH, fontWeight: 900, fontSize: 12 } }, v),
                 React.createElement("div", { style: { color: "rgba(255,255,255,.45)", fontSize: 8, marginTop: 1 } }, l)))))),
         React.createElement("div", { style: { background: WH, display: "flex", borderBottom: `1px solid ${BD}`, flexShrink: 0, overflowX: "auto", scrollbarWidth: "none" } }, [{ id: "dash", e: "📊", l: "Дашборд" }, { id: "orders", e: "📦", l: "Заказы" }, { id: "partners", e: "🏪", l: "Партнёры" }, { id: "drivers", e: "🚴", l: "Курьеры" }, { id: "finance", e: "💰", l: "Финансы" }].map(t => (React.createElement("button", { key: t.id, onClick: () => setTab(t.id), style: { flexShrink: 0, padding: "10px 10px", border: "none", background: "none", cursor: "pointer", fontSize: 10, fontWeight: tab === t.id ? 800 : 500, color: tab === t.id ? ADMA : GY, borderBottom: `2.5px solid ${tab === t.id ? ADMA : "transparent"}` } },
@@ -3807,9 +3809,9 @@ function AdminApp({ orders, onUpdate }) {
                                 d.today.earn,
                                 " \u0441.")),
                         React.createElement(Bdg, { l: d.online ? (d.status === "delivering" ? "Везёт" : "Свободен") : "Офлайн", c: d.online ? (d.status === "delivering" ? BL : GR) : MG, bg: d.online ? (d.status === "delivering" ? BLL : GRL) : BG }))))),
-                MOCK_PARTNERS.filter(p => p.status === "pending").length > 0 && (React.createElement("div", { style: { background: WH, borderRadius: 14, border: `2px solid ${ADMA}44`, padding: 13 } },
+                partners.filter(p => p.status === "pending").length > 0 && (React.createElement("div", { style: { background: WH, borderRadius: 14, border: `2px solid ${ADMA}44`, padding: 13 } },
                     React.createElement("div", { style: { fontWeight: 700, fontSize: 12, color: DK, marginBottom: 8 } }, "\u23F3 \u0417\u0430\u044F\u0432\u043A\u0438 \u043D\u0430 \u043F\u043E\u0434\u043A\u043B\u044E\u0447\u0435\u043D\u0438\u0435"),
-                    MOCK_PARTNERS.filter(p => p.status === "pending").map(p => (React.createElement("div", { key: p.id, style: { display: "flex", alignItems: "center", gap: 9, padding: "7px 0", borderBottom: `1px solid ${BD}` } },
+                    partners.filter(p => p.status === "pending").map(p => (React.createElement("div", { key: p.id, style: { display: "flex", alignItems: "center", gap: 9, padding: "7px 0", borderBottom: `1px solid ${BD}` } },
                         React.createElement("div", { style: { flex: 1 } },
                             React.createElement("div", { style: { fontSize: 11, fontWeight: 600, color: DK } }, p.name),
                             React.createElement("div", { style: { fontSize: 9, color: GY } },
@@ -3817,8 +3819,8 @@ function AdminApp({ orders, onUpdate }) {
                                 " \u00B7 ",
                                 p.city)),
                         React.createElement("div", { style: { display: "flex", gap: 5 } },
-                            React.createElement("button", { style: { background: GRL, color: GR, border: "none", borderRadius: 6, padding: "4px 8px", fontSize: 10, fontWeight: 700, cursor: "pointer" } }, "\u2713"),
-                            React.createElement("button", { style: { background: RL, color: R, border: "none", borderRadius: 6, padding: "4px 8px", fontSize: 10, fontWeight: 700, cursor: "pointer" } }, "\u2717")))))))),
+                            React.createElement("button", { onClick: () => setPartnerStatus(p.id, "active"), style: { background: GRL, color: GR, border: "none", borderRadius: 6, padding: "4px 8px", fontSize: 10, fontWeight: 700, cursor: "pointer" } }, "\u2713"),
+                            React.createElement("button", { onClick: () => setPartnerStatus(p.id, "rejected"), style: { background: RL, color: R, border: "none", borderRadius: 6, padding: "4px 8px", fontSize: 10, fontWeight: 700, cursor: "pointer" } }, "\u2717")))))))),
             tab === "orders" && React.createElement("div", { style: { padding: 12 } },
                 React.createElement("div", { style: { display: "flex", gap: 4, overflowX: "auto", scrollbarWidth: "none", marginBottom: 10 } }, [{ id: "all", l: "Все" }, { id: "new", l: "Новые" }, { id: "partner_accepted", l: "У партнёра" }, { id: "delivered", l: "Доставлено" }, { id: "declined", l: "Отменено" }].map(f => (React.createElement("button", { key: f.id, onClick: () => setOFilter(f.id), style: { flexShrink: 0, padding: "5px 9px", borderRadius: 8, border: `1px solid ${oFilter === f.id ? ADMA : BD}`, background: oFilter === f.id ? ADML : WH, color: oFilter === f.id ? ADMA : GY, fontSize: 10, fontWeight: 700, cursor: "pointer" } }, f.l)))),
                 fOrders.length === 0 ? React.createElement("div", { style: { textAlign: "center", padding: 30, color: GY } },
@@ -3853,7 +3855,7 @@ function AdminApp({ orders, onUpdate }) {
                             React.createElement("div", { style: { marginTop: 7, display: "flex", gap: 4, flexWrap: "wrap" } }, ["new", "partner_accepted", "ready", "driver_accepted", "picked_up", "delivered", "declined"].map(s => (React.createElement("button", { key: s, onClick: e => { e.stopPropagation(); onUpdate(o.id, s); }, style: { padding: "4px 7px", borderRadius: 6, border: `1px solid ${ADMA}55`, background: o.status === s ? ADML : BG, color: o.status === s ? ADMA : GY, fontSize: 9, fontWeight: 700, cursor: "pointer" } }, sBdg(s).props.l))))))))),
             tab === "partners" && React.createElement("div", { style: { padding: 12 } },
                 React.createElement("div", { style: { display: "flex", gap: 5, marginBottom: 10 } }, [{ id: "active", l: "Активные" }, { id: "pending", l: "На проверке" }].map(f => (React.createElement("button", { key: f.id, onClick: () => setPFilter(f.id), style: { padding: "5px 10px", borderRadius: 8, border: `1px solid ${pFilter === f.id ? ADMA : BD}`, background: pFilter === f.id ? ADML : WH, color: pFilter === f.id ? ADMA : GY, fontSize: 10, fontWeight: 700, cursor: "pointer" } }, f.l)))),
-                MOCK_PARTNERS.filter(p => p.status === pFilter).map(p => (React.createElement("div", { key: p.id, style: { background: WH, borderRadius: 13, border: `1px solid ${BD}`, padding: 12, marginBottom: 7 } },
+                partners.filter(p => p.status === pFilter).map(p => (React.createElement("div", { key: p.id, style: { background: WH, borderRadius: 13, border: `1px solid ${BD}`, padding: 12, marginBottom: 7 } },
                     React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 7 } },
                         React.createElement("div", null,
                             React.createElement("div", { style: { fontSize: 12, fontWeight: 800, color: DK } }, p.name),
@@ -3875,8 +3877,8 @@ function AdminApp({ orders, onUpdate }) {
                             p.revenue,
                             " \u0441.")),
                     p.status === "pending" && React.createElement("div", { style: { display: "flex", gap: 6, marginTop: 7 } },
-                        React.createElement("button", { style: { flex: 1, padding: "8px", background: GRL, color: GR, border: `1px solid ${GR}44`, borderRadius: 8, fontSize: 11, fontWeight: 700, cursor: "pointer" } }, "\u2713 \u041E\u0434\u043E\u0431\u0440\u0438\u0442\u044C"),
-                        React.createElement("button", { style: { flex: 1, padding: "8px", background: RL, color: R, border: `1px solid ${R}44`, borderRadius: 8, fontSize: 11, fontWeight: 700, cursor: "pointer" } }, "\u2717 \u041E\u0442\u043A\u043B\u043E\u043D\u0438\u0442\u044C")))))),
+                        React.createElement("button", { onClick: () => setPartnerStatus(p.id, "active"), style: { flex: 1, padding: "8px", background: GRL, color: GR, border: `1px solid ${GR}44`, borderRadius: 8, fontSize: 11, fontWeight: 700, cursor: "pointer" } }, "\u2713 \u041E\u0434\u043E\u0431\u0440\u0438\u0442\u044C"),
+                        React.createElement("button", { onClick: () => setPartnerStatus(p.id, "rejected"), style: { flex: 1, padding: "8px", background: RL, color: R, border: `1px solid ${R}44`, borderRadius: 8, fontSize: 11, fontWeight: 700, cursor: "pointer" } }, "\u2717 \u041E\u0442\u043A\u043B\u043E\u043D\u0438\u0442\u044C")))))),
             tab === "drivers" && React.createElement("div", { style: { padding: 12 } },
                 React.createElement("div", { style: { fontWeight: 700, fontSize: 10, color: MG, letterSpacing: 1, marginBottom: 9 } },
                     "\u0412\u0421\u0415 \u041A\u0423\u0420\u042C\u0415\u0420\u042B (",
@@ -3921,7 +3923,7 @@ function AdminApp({ orders, onUpdate }) {
                         React.createElement("span", { style: { fontWeight: 700, color: c } }, v))))),
                 React.createElement("div", { style: { background: WH, borderRadius: 14, border: `1px solid ${BD}`, padding: 12 } },
                     React.createElement("div", { style: { fontWeight: 700, fontSize: 12, color: DK, marginBottom: 10 } }, "\u041F\u043E \u043F\u0430\u0440\u0442\u043D\u0451\u0440\u0430\u043C"),
-                    MOCK_PARTNERS.filter(p => p.status === "active").map(p => (React.createElement("div", { key: p.id, style: { display: "flex", justifyContent: "space-between", padding: "6px 0", borderBottom: `1px solid ${BD}`, fontSize: 11 } },
+                    partners.filter(p => p.status === "active").map(p => (React.createElement("div", { key: p.id, style: { display: "flex", justifyContent: "space-between", padding: "6px 0", borderBottom: `1px solid ${BD}`, fontSize: 11 } },
                         React.createElement("span", { style: { color: DK, fontWeight: 600 } }, p.name),
                         React.createElement("span", { style: { fontWeight: 700, color: ADMA } },
                             p.revenue,
@@ -3937,6 +3939,12 @@ function DispatcherApp({ orders, onUpdate }) {
     const [auth, setAuth] = useState(null);
     const [tab, setTab] = useState("queue");
     const [assignOpen, setAssignOpen] = useState(null);
+    const [tickets, setTickets] = useState([
+        { id: 1, name: "Зафар А.", phone: "+992 93 111-22-33", issue: "Заказ опаздывает на 40 мин", order: "#o1", pri: "high" },
+        { id: 2, name: "Малика Т.", phone: "+992 88 222-33-44", issue: "Привезли не тот товар", order: "#o2", pri: "medium" },
+        { id: 3, name: "Бахром К.", phone: "+992 77 333-44-55", issue: "Хочу вернуть деньги", order: "#o3", pri: "low" },
+    ]);
+    function resolveTicket(id) { setTickets(prev => prev.filter(t => t.id !== id)); }
     const sc = { flex: 1, overflowY: "auto", scrollbarWidth: "none" };
     function SB() { return (React.createElement("div", { style: { background: DSP, padding: "10px 22px 5px", display: "flex", justifyContent: "space-between", flexShrink: 0 } },
         React.createElement("span", { style: { color: WH, fontSize: 13, fontWeight: 700 } }, "9:41"),
@@ -4042,7 +4050,7 @@ function DispatcherApp({ orders, onUpdate }) {
                             React.createElement("div", { style: { fontSize: 10 } }, { partner_accepted: "👨‍🍳", driver_accepted: "🚴", picked_up: "📦" }[o.status] || "•")),
                         React.createElement("div", { style: { display: "flex", gap: 5 } },
                             React.createElement("button", { onClick: () => onUpdate(o.id, "delivered"), style: { flex: 1, padding: "6px", background: GRL, color: GR, border: "none", borderRadius: 7, fontSize: 10, fontWeight: 700, cursor: "pointer" } }, "\u2713 \u0414\u043E\u0441\u0442\u0430\u0432\u043B\u0435\u043D"),
-                            React.createElement("button", { style: { padding: "6px 9px", background: DSPL, color: DSPA, border: "none", borderRadius: 7, fontSize: 10, fontWeight: 700, cursor: "pointer" } },
+                            React.createElement("a", { href: `tel:${(o.phone || "").replace(/\s/g, "")}`, style: { padding: "6px 9px", background: DSPL, color: DSPA, border: "none", borderRadius: 7, fontSize: 10, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", textDecoration: "none" } },
                                 React.createElement(Icon, { name: "phone", size: 15, color: "currentColor" })),
                             React.createElement("button", { style: { padding: "6px 9px", background: BG, color: GY, border: `1px solid ${BD}`, borderRadius: 7, fontSize: 10, cursor: "pointer" } },
                                 React.createElement(Icon, { name: "chat", size: 15, color: "currentColor" }))))))),
@@ -4064,7 +4072,7 @@ function DispatcherApp({ orders, onUpdate }) {
                         d.today.earn,
                         " \u0441.")),
                 d.online && React.createElement("div", { style: { display: "flex", gap: 5, marginTop: 7 } },
-                    React.createElement("button", { style: { flex: 1, padding: "6px", background: DSPL, color: DSPA, border: "none", borderRadius: 7, fontSize: 10, fontWeight: 700, cursor: "pointer" } },
+                    React.createElement("a", { href: `tel:${(d.phone || "").replace(/\s/g, "")}`, style: { flex: 1, padding: "6px", background: DSPL, color: DSPA, border: "none", borderRadius: 7, fontSize: 10, fontWeight: 700, cursor: "pointer", textAlign: "center", textDecoration: "none", display: "block", boxSizing: "border-box" } },
                         React.createElement(Icon, { name: "phone", size: 14, color: "currentColor", style: { marginRight: 5 } }),
                         "\u041F\u043E\u0437\u0432\u043E\u043D\u0438\u0442\u044C"),
                     React.createElement("button", { style: { flex: 1, padding: "6px", background: BG, color: GY, border: `1px solid ${BD}`, borderRadius: 7, fontSize: 10, cursor: "pointer" } },
@@ -4072,7 +4080,10 @@ function DispatcherApp({ orders, onUpdate }) {
                         "\u041D\u0430\u043F\u0438\u0441\u0430\u0442\u044C")))))),
             tab === "support" && React.createElement("div", { style: { padding: 11 } },
                 React.createElement("div", { style: { fontWeight: 700, fontSize: 10, color: MG, letterSpacing: 1, marginBottom: 9 } }, "\u041E\u0411\u0420\u0410\u0429\u0415\u041D\u0418\u042F \u041A\u041B\u0418\u0415\u041D\u0422\u041E\u0412"),
-                [{ id: 1, name: "Зафар А.", issue: "Заказ опаздывает на 40 мин", order: "#o1", pri: "high" }, { id: 2, name: "Малика Т.", issue: "Привезли не тот товар", order: "#o2", pri: "medium" }, { id: 3, name: "Бахром К.", issue: "Хочу вернуть деньги", order: "#o3", pri: "low" }].map(t => (React.createElement("div", { key: t.id, style: { background: WH, borderRadius: 13, border: `2px solid ${t.pri === "high" ? "#FCA5A5" : t.pri === "medium" ? "#FDE68A" : BD}`, padding: 12, marginBottom: 8 } },
+                tickets.length === 0 && React.createElement("div", { style: { textAlign: "center", padding: 38, color: GY } },
+                    React.createElement("div", { style: { fontSize: 42, marginBottom: 8 } }, "✅"),
+                    React.createElement("div", { style: { fontWeight: 700, fontSize: 13 } }, "Нет открытых обращений")),
+                tickets.map(t => (React.createElement("div", { key: t.id, style: { background: WH, borderRadius: 13, border: `2px solid ${t.pri === "high" ? "#FCA5A5" : t.pri === "medium" ? "#FDE68A" : BD}`, padding: 12, marginBottom: 8 } },
                     React.createElement("div", { style: { display: "flex", justifyContent: "space-between", marginBottom: 5 } },
                         React.createElement("div", null,
                             React.createElement("div", { style: { fontSize: 11, fontWeight: 700, color: DK } },
@@ -4082,10 +4093,10 @@ function DispatcherApp({ orders, onUpdate }) {
                         React.createElement(Bdg, { l: t.pri === "high" ? "Срочно" : t.pri === "medium" ? "Важно" : "Обычное", c: t.pri === "high" ? "#DC2626" : t.pri === "medium" ? GD : GY, bg: t.pri === "high" ? "#FEF2F2" : t.pri === "medium" ? GDL : BG })),
                     React.createElement("div", { style: { fontSize: 11, color: SL, marginBottom: 7 } }, t.issue),
                     React.createElement("div", { style: { display: "flex", gap: 5 } },
-                        React.createElement("button", { style: { flex: 1, padding: "7px", background: DSPL, color: DSPA, border: "none", borderRadius: 8, fontSize: 10, fontWeight: 700, cursor: "pointer" } },
+                        React.createElement("a", { href: `tel:${(t.phone || "").replace(/\s/g, "")}`, style: { flex: 1, padding: "7px", background: DSPL, color: DSPA, border: "none", borderRadius: 8, fontSize: 10, fontWeight: 700, cursor: "pointer", textAlign: "center", textDecoration: "none", display: "block", boxSizing: "border-box" } },
                             React.createElement(Icon, { name: "phone", size: 14, color: "currentColor", style: { marginRight: 5 } }),
                             "\u041F\u043E\u0437\u0432\u043E\u043D\u0438\u0442\u044C"),
-                        React.createElement("button", { style: { flex: 1, padding: "7px", background: GRL, color: GR, border: "none", borderRadius: 8, fontSize: 10, fontWeight: 700, cursor: "pointer" } }, "\u2713 \u0420\u0435\u0448\u0438\u0442\u044C")))))))));
+                        React.createElement("button", { onClick: () => resolveTicket(t.id), style: { flex: 1, padding: "7px", background: GRL, color: GR, border: "none", borderRadius: 8, fontSize: 10, fontWeight: 700, cursor: "pointer" } }, "\u2713 \u0420\u0435\u0448\u0438\u0442\u044C")))))))));
 }
 // ════════════════════════════════════════════════════════════════════
 //  ROOT
